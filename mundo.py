@@ -438,6 +438,13 @@ class Mundo:
                     mv["itens"].append(["smg" if rnd.random() < 0.55 else "besta", 1])
                 if rnd.random() < 0.4:
                     mv["itens"].append(["flecha", rnd.randint(6, 14)])
+        # miras (lunetas): raras nas casas, mais comuns nas caixas militares, algumas no chao
+        for mv in casa:
+            if rnd.random() < 0.035:
+                mv["itens"].append(["mira", 1])
+        for mv in self.moveis:
+            if mv["tipo"] == "militar" and rnd.random() < 0.22:
+                mv["itens"].append(["mira", 1])
         # seringas rarissimas nos hospitais
         medicos = [mv for mv in self.moveis if mv["tipo"] == "medico" and (mv.get("predio") or {}).get("tipo") != "militar"]
         rnd.shuffle(medicos)

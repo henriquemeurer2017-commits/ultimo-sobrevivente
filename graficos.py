@@ -428,6 +428,12 @@ def _desenha_icone_bruto(s, item, x, y, k=1.0):
             pygame.draw.line(s, (150, 110, 70), (x - 9 * k, y + i * k), (x + 7 * k, y + i * k), max(1, int(1.5 * k)))
             pygame.draw.polygon(s, (190, 190, 200), [(x + 7 * k, y + (i - 2) * k), (x + 11 * k, y + i * k),
                                                      (x + 7 * k, y + (i + 2) * k)])
+    elif item == "mira":
+        pygame.draw.rect(s, (20, 20, 24), R(-11, -4, 22, 8), border_radius=3)
+        pygame.draw.rect(s, (90, 96, 106), R(-10, -3, 20, 6), border_radius=3)
+        pygame.draw.circle(s, (120, 200, 255), (x + int(9 * k), y), max(2, int(3 * k)))
+        pygame.draw.rect(s, (60, 64, 72), R(-4, 3, 3, 4))
+        pygame.draw.rect(s, (60, 64, 72), R(3, 3, 3, 4))
     elif item == "seringa":
         pygame.draw.line(s, (200, 200, 210), (x - 11 * k, y + 8 * k), (x + 6 * k, y - 9 * k), max(1, int(6 * k)))
         pygame.draw.line(s, (240, 60, 70), (x - 8 * k, y + 5 * k), (x + 3 * k, y - 6 * k), max(1, int(3 * k)))
@@ -513,6 +519,21 @@ def sprite_ponte():
     for i in range(8):
         pygame.draw.rect(s, (110, 80, 50), (0, i * 12, 96, 11))
         pygame.draw.rect(s, (150, 112, 70), (0, i * 12 + 1, 96, 7))
+    return s
+
+
+def sprite_bancada():
+    s = pygame.Surface((64, 40), pygame.SRCALPHA)
+    pygame.draw.rect(s, (70, 48, 30), (2, 6, 60, 30), border_radius=3)
+    pygame.draw.rect(s, (140, 100, 62), (4, 8, 56, 22), border_radius=2)
+    for x in (12, 26, 40):
+        pygame.draw.line(s, (110, 78, 48), (x, 8), (x, 30), 1)
+    pygame.draw.rect(s, (120, 124, 134), (8, 12, 14, 6))      # morsa
+    pygame.draw.rect(s, (70, 72, 80), (12, 18, 6, 6))
+    pygame.draw.line(s, (150, 104, 62), (34, 14), (52, 22), 3)  # martelo
+    pygame.draw.rect(s, (110, 114, 124), (49, 17, 8, 7))
+    pygame.draw.circle(s, (180, 184, 194), (28, 24), 3)        # parafusos
+    pygame.draw.circle(s, (180, 184, 194), (36, 26), 2)
     return s
 
 

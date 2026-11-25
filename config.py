@@ -45,6 +45,7 @@ ITENS = {
     "308": "Munição de rifle",
     "silenciador": "Silenciador",
     "flecha": "Flechas",
+    "mira": "Mira (luneta)",
     "facao": "Facão",
     "smg": "Submetralhadora",
     "besta": "Besta",
@@ -83,6 +84,9 @@ ARMAS = [
     dict(id="besta", nome="Besta", melee=False, mun="flecha", pente=1, dano=130, cd=0.3, disp=0.008,
          balas=1, alcance=950, recarga=1.3, ruido=30, auto=False, silencia=False, fura=1),
 ]
+# bancada: nivel maximo das melhorias
+NIVEL_MAX = 3
+MOCHILA_EXTRA = 40      # espaco a mais por nivel de reforco da mochila
 # quanto a tela treme em cada tiro
 TREMOR = {"pistola": 2.5, "espingarda": 8, "fuzil": 2.2, "rifle": 9, "smg": 1.8, "besta": 1.5}
 ARMA_IDX = {a["id"]: i for i, a in enumerate(ARMAS)}
@@ -119,7 +123,7 @@ NOMES_MOVEIS = {
 # espaco que cada unidade ocupa na mochila
 ESPACO = {"comida": 1, "agua": 1, "bandagem": 0.5, "kit": 1.5, "9mm": 0.04, "12": 0.08, "556": 0.04, "308": 0.08,
           "tabua": 1, "sucata": 1, "ferramentas": 2, "seringa": 0.5, "saco": 4,
-          "flecha": 0.15}
+          "flecha": 0.15, "mira": 0.5}
 # estacoes do ano: cada uma dura 6 dias. (nome, multiplica cor, soma cor, fome x, sede x)
 ESTACOES = [("Verão", (1.04, 1.02, 0.92), (8, 6, 0), 1.0, 1.35),
             ("Outono", (1.12, 0.92, 0.70), (14, 4, 0), 1.0, 1.0),
@@ -137,5 +141,6 @@ RECEITAS = [
     dict(id="abrigo", nome="Bunker (abrigo)", custo={"tabua": 25, "sucata": 15, "ferramentas": 1}),
     dict(id="arame", nome="Arame farpado", custo={"sucata": 3}),
     dict(id="ponte", nome="Ponte de madeira", custo={"tabua": 4}),
+    dict(id="bancada", nome="Bancada", custo={"tabua": 10, "sucata": 6, "ferramentas": 1}),
 ]
 RAIO_ABRIGO = 260

@@ -148,6 +148,7 @@ class Jogo:
         self.spr_barricada = G.sprite_barricada()
         self.spr_fogueira = G.sprite_fogueira()
         self.spr_abrigo = G.sprite_abrigo()
+        self.spr_bancada = G.sprite_bancada()
         self.spr_arame = G.sprite_arame()
         self.spr_ponte = G.sprite_ponte()
         self.spr_torre = G.sprite_torre()
@@ -355,7 +356,7 @@ class Jogo:
             "Botão direito: mirar com calma   ·   R: recarregar   ·   1 a 6: trocar de arma   ·   ESPAÇO: esquiva rápida",
             "E: revistar armários, carros e caixas  ·  beber água no lago  ·  dormir  ·  cortar árvore (com machado)",
             "F: comer   ·   G: beber água   ·   H: bandagem   ·   J: kit médico",
-            "B: construir   ·   L: lanterna   ·   M: mapa   ·   V: abrir a MOCHILA (clique para comer, beber, curar e construir)",
+            "B: construir (a BANCADA melhora armas e mochila)  ·  L: lanterna  ·  M: mapa  ·  V: MOCHILA",
             "",
             "Fique de olho nas barras de VIDA, FOME e SEDE. Se a fome ou a sede zerarem, você perde vida.",
             "Hospital cura. Bunker e SACO DE DORMIR servem para dormir e salvar. A SERINGA (rara, nos bunkers) cura tudo.",
@@ -404,6 +405,9 @@ class Jogo:
         self.acao = None
         self.t_spawn = 0.0
         self.na_calma = False
+        self.niveis = {}
+        self.miras = []
+        self.reforco_mochila = 0
         self.tremor = 0.0
         self.numeros = []
         self.esquiva = 0.0
@@ -468,6 +472,7 @@ class Jogo:
             cortadas=self.cortadas, construidos=self.construidos, mochilas=extras,
             explorado=self.explorado.hex(), lanterna=self.lanterna, nivel_mochila=self.nivel_mochila,
             feridas=[self.p.sangrando, self.p.perna, self.p.braco],
+            niveis=self.niveis, miras=self.miras, reforco_mochila=self.reforco_mochila,
         )
         try:
             tmp = SAVE_FILE + ".tmp"
@@ -503,6 +508,9 @@ class Jogo:
                     break
         self.inv = d["inv"]
         self.nivel_mochila = d.get("nivel_mochila", 0)
+        self.niveis = d.get("niveis", {})
+        self.miras = d.get("miras", [])
+        self.reforco_mochila = d.get("reforco_mochila", 0)
         self.p.sangrando, self.p.perna, self.p.braco = d.get("feridas", [False, False, False])
         self.armas = d["armas"]
         self.pente = d["pente"]
@@ -572,7 +580,47 @@ class Jogo:
         return s
 
     def arma_atual(self):
-        return ARMAS[ARMA_IDX[self.arma]]
+        return self.arma_melhorada(self.arma)
+
+    def arma_melhorada(self, ida):
+        """A arma com as melhorias da bancada e a mira."""
+        n = self.niveis.get(ida, 0)
+        mira = ida in self.miras
+        k = (ida, n, mira)
+        cache = self.__dict__.setdefault("cache_arma", {})
+        if k not in cache:
+            a = dict(ARMAS[ARMA_IDX[ida]])
+            a["dano"] = a["dano"] * (1 + 0.25 * n)
+            a["cd"] = a["cd"] * (1 - 0.08 * n)
+            if not a["melee"]:
+                a["pente"] = a["pente"] + n if ida == "besta" else int(round(a["pente"] * (1 + 0.3 * n)))
+                a["disp"] = a["disp"] * (1 - 0.15 * n) * (0.45 if mira else 1.0)
+                a["alcance"] = a["alcance"] * (1 + 0.1 * n) * (1.25 if mira else 1.0)
+            else:
+                a["alcance"] = a["alcance"] + 4 * n
+            cache[k] = a
+        return cache[k]
+
+    def custo_melhoria(self, n):
+        c = {"sucata": 4 * (n + 1)}
+        if n >= 1:
+            c["ferramentas"] = 1
+        if n >= 2:
+            c["tabua"] = 6
+        return c
+
+    def custo_mochila(self, n):
+        return {"tabua": 6 * (n + 1), "sucata": 4 * (n + 1), "ferramentas": 1}
+
+    def pagar(self, custo):
+        if not all(self.inv.get(k, 0) >= q for k, q in custo.items()):
+            falta = ", ".join(f"{q - self.inv.get(k, 0)} {ITENS[k].lower()}" for k, q in custo.items()
+                              if self.inv.get(k, 0) < q)
+            self.msg("Falta: " + falta, (255, 170, 140))
+            return False
+        for k, q in custo.items():
+            self.inv[k] -= q
+        return True
 
     def dar(self, item, q, avisar=True):
         if item in ARMAS_IDS:
@@ -592,11 +640,27 @@ class Jogo:
             if self.arma == "faca":
                 self.arma = item
                 self.recarga_t = 0
+            if self.inv.get("mira_guardada") and not a["melee"] and item not in self.miras:
+                self.inv["mira_guardada"] -= 1
+                self.miras.append(item)
+                self.msg(f"Mira colocada na {a['nome']}.", (180, 230, 255))
             if "silenciador_guardado" in self.inv and a.get("silencia") and item not in self.silen:
                 self.inv.pop("silenciador_guardado")
                 self.silen.append(item)
                 self.msg(f"Silenciador colocado na {a['nome']}.", (180, 230, 255))
             return
+        if item == "mira":
+            ordem = ["rifle", "fuzil", "besta", "smg", "espingarda", "pistola"]
+            for a in sorted(ARMAS, key=lambda a: ordem.index(a["id"]) if a["id"] in ordem else 99):
+                if a["id"] in self.armas and not a["melee"] and a["id"] not in self.miras:
+                    self.miras.append(a["id"])
+                    if avisar:
+                        self.msg(f"Achou uma MIRA! Colocou na {a['nome']}: tiro bem mais certeiro.", (180, 230, 255))
+                    return 0
+            self.inv["mira_guardada"] = self.inv.get("mira_guardada", 0) + q
+            if avisar:
+                self.msg("Mira guardada: vai na próxima arma de fogo que você achar.", (180, 230, 255))
+            return 0
         if item == "silenciador":
             for a in sorted(ARMAS, key=lambda a: -ARMA_IDX[a["id"]]):
                 if a["id"] in self.armas and a.get("silencia") and a["id"] not in self.silen:
@@ -829,6 +893,10 @@ class Jogo:
                     extra = f"{self.pente.get(a['id'], 0)}+{self.inv.get(a['mun'], 0)}"
                     if a["id"] in self.silen:
                         extra += " S"
+                    if a["id"] in self.miras:
+                        extra += " M"
+                if self.niveis.get(a["id"]):
+                    self.texto(f"+{self.niveis[a['id']]}", (r.right - 22, r.y + 2), self.f_peq, (255, 210, 90), sombra=False)
                     self.texto(extra, (r.centerx, r.y + 60), self.f_peq, (200, 195, 180), centro=True)
                 if self.click and r.collidepoint(pygame.mouse.get_pos()):
                     self.trocar_arma(a["id"])
@@ -841,7 +909,7 @@ class Jogo:
         for i, rec in enumerate(RECEITAS):
             pode = all(self.inv.get(k, 0) >= q for k, q in rec["custo"].items())
             partes = [f"{q} {curto.get(k, k)}" for k, q in rec["custo"].items()]
-            r = pygame.Rect(450 + i * 160, yc + 22, 154, 36)
+            r = pygame.Rect(450 + i * 133, yc + 22, 128, 36)
             linhas = [", ".join(partes)] if len(partes) < 3 else [", ".join(partes[:2]), partes[2]]
             for k, txt in enumerate(linhas):
                 self.texto(txt, (r.centerx, r.bottom + 11 + k * 16), self.f_peq,
@@ -869,8 +937,84 @@ class Jogo:
         del arr
         return s
 
+    # ================================================================ bancada
+    def tela_bancada(self, dt):
+        tc = self.teclas
+        if pygame.K_ESCAPE in tc or pygame.K_e in tc or pygame.K_v in tc:
+            self.estado = "jogo"
+            return
+        self.desenhar()
+        tela = self.tela
+        sh = pygame.Surface((W, H), pygame.SRCALPHA)
+        sh.fill((0, 0, 0, 180))
+        tela.blit(sh, (0, 0))
+        caixa = pygame.Rect(140, 24, 1000, 672)
+        self.painel(caixa, 230)
+        self.texto("BANCADA", (caixa.x + 24, caixa.y + 12), self.f_grande, (255, 220, 140))
+        self.texto("Cada melhoria: mais dano, mais rápida; nas armas de fogo, pente maior e tiro mais certeiro.",
+                   (caixa.x + 26, caixa.y + 62), self.f_peq, (200, 195, 180))
+        mat = "   ".join(f"{ITENS[k]}: {self.inv.get(k, 0)}" for k in ("sucata", "ferramentas", "tabua"))
+        self.texto("Você tem  ·  " + mat, (caixa.x + 26, caixa.y + 84), self.f_peq, (180, 230, 180))
+        if self.botao_peq("Fechar (E)", pygame.Rect(caixa.right - 120, caixa.y + 16, 104, 36)):
+            self.estado = "jogo"
+            return
+        y = caixa.y + 116
+        for ida in self.armas:
+            a = ARMAS[ARMA_IDX[ida]]
+            n = self.niveis.get(ida, 0)
+            r = pygame.Rect(caixa.x + 20, y, caixa.w - 40, 48)
+            pygame.draw.rect(tela, (34, 36, 40), r, border_radius=8)
+            G.desenha_icone(tela, ida, r.x + 34, r.centery, 1.3)
+            self.texto(a["nome"], (r.x + 70, r.y + 4), self.f_med2)
+            extras = [t for t, tem in (("silenciador", ida in self.silen), ("mira", ida in self.miras)) if tem]
+            self.texto(f"nível {n} de {NIVEL_MAX}" + ("   ·   " + " + ".join(extras) if extras else ""),
+                       (r.x + 70, r.y + 26), self.f_peq, (255, 210, 90))
+            atual = self.arma_melhorada(ida)
+            info = f"dano {atual['dano']:.0f}"
+            if not a["melee"]:
+                info += f"  ·  pente {atual['pente']}"
+            self.texto(info, (r.x + 330, r.y + 14), self.f_peq, (210, 205, 195))
+            if n < NIVEL_MAX:
+                custo = self.custo_melhoria(n)
+                txt = ", ".join(f"{q} {ITENS[k].split(' ')[0].lower()}" for k, q in custo.items())
+                pode = all(self.inv.get(k, 0) >= q for k, q in custo.items())
+                self.texto(txt, (r.x + 540, r.y + 14), self.f_peq, (200, 195, 180) if pode else (150, 140, 140))
+                if self.botao_peq(f"Melhorar (+{n + 1})", pygame.Rect(r.right - 150, r.y + 7, 140, 34), (40, 60, 40), pode):
+                    if self.pagar(custo):
+                        self.niveis[ida] = n + 1
+                        self.som("golpe", 0.6)
+                        self.msg(f"{a['nome']} melhorada: agora é +{n + 1}!", (255, 220, 120))
+                        self.salvar()
+            else:
+                self.texto("NO MÁXIMO", (r.right - 130, r.y + 14), self.f_med2, (255, 210, 90))
+            y += 54
+        # mochila
+        y += 6
+        r = pygame.Rect(caixa.x + 20, y, caixa.w - 40, 52)
+        pygame.draw.rect(tela, (34, 40, 36), r, border_radius=8)
+        G.desenha_icone(tela, f"mochila{self.nivel_mochila}" if self.nivel_mochila else "mochila", r.x + 34, r.centery, 1.3)
+        n = self.reforco_mochila
+        self.texto(f"Reforçar a mochila  (+{MOCHILA_EXTRA} de espaço)", (r.x + 70, r.y + 4), self.f_med2)
+        self.texto(f"nível {n} de {NIVEL_MAX}   ·   cabe {self.capacidade()}", (r.x + 70, r.y + 28), self.f_peq,
+                   (255, 210, 90))
+        if n < NIVEL_MAX:
+            custo = self.custo_mochila(n)
+            txt = ", ".join(f"{q} {ITENS[k].split(' ')[0].lower()}" for k, q in custo.items())
+            pode = all(self.inv.get(k, 0) >= q for k, q in custo.items())
+            self.texto(txt, (r.x + 540, r.y + 16), self.f_peq, (200, 195, 180) if pode else (150, 140, 140))
+            if self.botao_peq(f"Reforçar (+{n + 1})", pygame.Rect(r.right - 150, r.y + 9, 140, 34), (40, 60, 40), pode):
+                if self.pagar(custo):
+                    self.reforco_mochila = n + 1
+                    self.som("golpe", 0.6)
+                    self.msg(f"Mochila reforçada! Agora cabe {self.capacidade()}.", (255, 220, 120))
+                    self.salvar()
+        else:
+            self.texto("NO MÁXIMO", (r.right - 130, r.y + 16), self.f_med2, (255, 210, 90))
+        self.texto("Dica: a MIRA (luneta) você acha no mapa, nas casas e nas caixas militares. Ela encaixa sozinha na arma.",
+                   (caixa.x + 26, caixa.bottom - 34), self.f_peq, (170, 200, 230))
+
     def capacidade(self):
-        return MOCHILAS[self.nivel_mochila][1]
+        return MOCHILAS[self.nivel_mochila][1] + MOCHILA_EXTRA * self.reforco_mochila
 
     def espaco_usado(self):
         return sum(ESPACO.get(k, 0) * v for k, v in self.inv.items())
@@ -934,6 +1078,8 @@ class Jogo:
                 m.add_colisor(x + math.cos(a) * k, y + math.sin(a) * k, 10)
         elif tipo == "fogueira":
             m.add_colisor(x, y, 13)
+        elif tipo == "bancada":
+            m.add_colisor(x, y, 16)
         elif tipo == "abrigo":
             m.add_colisor(x, y, 12)
         elif tipo == "ponte":
@@ -956,7 +1102,7 @@ class Jogo:
         if c["tipo"] == "barricada":
             a = math.radians(c.get("ang", 0))
             return [(x + math.cos(a) * k, y + math.sin(a) * k) for k in (-26, -9, 9, 26)]
-        if c["tipo"] in ("fogueira", "abrigo"):
+        if c["tipo"] in ("fogueira", "abrigo", "bancada"):
             return [(x, y)]
         return []
 
@@ -1165,6 +1311,11 @@ class Jogo:
                 if d < 60 and d < md:
                     md = d
                     melhor = ("abrigo", c)
+            elif c["tipo"] == "bancada":
+                d = math.hypot(c["x"] - p.x, c["y"] - p.y)
+                if d < 60 and d < md:
+                    md = d
+                    melhor = ("bancada", c)
             elif c["tipo"] in ("barricada", "fogueira", "arame"):
                 d = math.hypot(c["x"] - p.x, c["y"] - p.y)
                 if d < 56 and d < md:
@@ -1202,6 +1353,8 @@ class Jogo:
             return "[E] Descansar e se curar" if obj.get("hospital") else "[E] Dormir no bunker (salva o jogo)"
         if tipo == "abrigo":
             return "[E] Dormir no seu bunker (salva o jogo)"
+        if tipo == "bancada":
+            return "[E] Usar a bancada (melhorar armas e mochila)"
         if tipo == "desmontar":
             nome = {"barricada": "a barricada", "fogueira": "a fogueira", "arame": "o arame farpado"}[obj["tipo"]]
             return f"[E] Desmontar {nome} (devolve o material)"
@@ -1231,6 +1384,9 @@ class Jogo:
             self.acao = dict(tipo="movel", obj=obj, t=0.0, total=dur, txt="Revistando...")
         elif tipo == "desmontar":
             self.acao = dict(tipo="desmontar", obj=obj, t=0.0, total=1.2, txt="Desmontando...")
+        elif tipo == "bancada":
+            self.estado = "bancada"
+            self.som("clique", 0.4)
         elif tipo == "cama":
             if self.zumbi_perto():
                 self.msg("Não dá para descansar com zumbi atrás de você!", (255, 150, 120))
@@ -1691,7 +1847,7 @@ class Jogo:
         # camera
         alvo_x = p.x
         alvo_y = p.y
-        k = 0.45 if mira else 0.12
+        k = (0.75 if self.arma in self.miras else 0.45) if mira else 0.12
         alvo_x += (mouse[0] - W / 2) * k
         alvo_y += (mouse[1] - H / 2) * k
         self.cam[0] += (alvo_x - self.cam[0]) * min(1, dt * 8)
@@ -1766,6 +1922,8 @@ class Jogo:
             self.msg("Zumbis não chegam perto do seu bunker. Durma nele com E.", (200, 230, 255))
         if rec["id"] == "arame":
             self.msg("Zumbi que passar no arame se machuca e fica lento.", (200, 230, 255))
+        if rec["id"] == "bancada":
+            self.msg("Bancada pronta! Chegue perto e aperte E para melhorar armas e a mochila.", (200, 230, 255))
         if rec["id"] == "ponte":
             self.msg("Ponte pronta! Construa mais pedaços para atravessar a água.", (200, 230, 255))
             return
@@ -1779,7 +1937,7 @@ class Jogo:
                 return False
             tx, ty = int(x // T), int(y // T)
             return any(m.tile(tx + dx, ty + dy) != AGUA for dy in range(-2, 3) for dx in range(-2, 3))
-        r = {"barricada": 14, "fogueira": 14, "abrigo": 40, "arame": 10}[tipo]
+        r = {"barricada": 14, "fogueira": 14, "abrigo": 40, "arame": 10, "bancada": 20}[tipo]
         if m.bloqueado(x, y, r):
             return False
         if math.hypot(x - self.p.x, y - self.p.y) < (r + 14):
@@ -2023,7 +2181,7 @@ class Jogo:
     def renascer(self):
         p = self.p
         m = self.mundo
-        itens = [[k, v] for k, v in self.inv.items() if v > 0 and k != "silenciador_guardado"]
+        itens = [[k, v] for k, v in self.inv.items() if v > 0 and k not in ("silenciador_guardado", "mira_guardada")]
         if self.inv.get("silenciador_guardado"):
             itens.append(["silenciador", self.inv["silenciador_guardado"]])
         for ida in self.armas:
@@ -2034,6 +2192,11 @@ class Jogo:
                     itens.append([a["mun"], self.pente[ida]])
         for ida in self.silen:
             itens.append(["silenciador", 1])
+        for ida in self.miras:
+            itens.append(["mira", 1])
+        if self.inv.get("mira_guardada"):
+            itens.append(["mira", self.inv["mira_guardada"]])
+        self.miras = []
         if itens:
             m.add_movel(dict(id=len(m.moveis), x=p.x, y=p.y, tipo="mochila", aberto=False, itens=itens))
             self.mochila_pos = (p.x, p.y)
@@ -2371,6 +2534,8 @@ class Jogo:
                     tela.blit(spr, (c["x"] - camx - spr.get_width() / 2, c["y"] - camy - spr.get_height() / 2))
                 elif c["tipo"] == "abrigo":
                     tela.blit(self.spr_abrigo, (c["x"] - camx - 56, c["y"] - camy - 56))
+                elif c["tipo"] == "bancada":
+                    tela.blit(self.spr_bancada, (c["x"] - camx - 32, c["y"] - camy - 20))
         # zumbis e jogador
         for z in self.zumbis:
             if vis.collidepoint(z.x, z.y):
@@ -2495,7 +2660,7 @@ class Jogo:
         ok = self.lugar_ok(rec["id"], wx, wy) and all(self.inv.get(i, 0) >= q for i, q in rec["custo"].items())
         spr = {"barricada": self.rot(("bar",), self.spr_barricada, math.degrees(p.ang), 3), "fogueira": self.spr_fogueira,
                "abrigo": self.spr_abrigo, "arame": self.rot(("arame",), self.spr_arame, math.degrees(p.ang), 3),
-               "ponte": self.spr_ponte}[rec["id"]].copy()
+               "ponte": self.spr_ponte, "bancada": self.spr_bancada}[rec["id"]].copy()
         if rec["id"] == "ponte":
             wx = (int(wx // T)) * T + 16
             wy = (int(wy // T)) * T + 16
@@ -2626,7 +2791,9 @@ class Jogo:
         a = self.arma_atual()
         self.painel(pygame.Rect(W - 330, H - 136, 316, 122))
         G.desenha_icone(tela, a["id"], W - 290, H - 104, 2.0)
-        self.texto(a["nome"], (W - 250, H - 128), self.f_med)
+        nv = self.niveis.get(self.arma, 0)
+        self.texto(a["nome"] + (f"  +{nv}" if nv else ""), (W - 250, H - 128), self.f_med,
+                   (255, 220, 120) if nv else (235, 230, 220))
         if a["melee"]:
             self.texto("corpo a corpo", (W - 250, H - 100), self.f_peq, (190, 190, 190))
         else:
@@ -2635,8 +2802,9 @@ class Jogo:
             else:
                 cor = (255, 120, 100) if self.pente.get(self.arma, 0) == 0 else (240, 240, 240)
                 self.texto(f"{self.pente.get(self.arma, 0)} / {self.inv.get(a['mun'], 0)}", (W - 250, H - 102), self.f_grande, cor)
-            if self.arma in self.silen:
-                self.texto("silenciador", (W - 120, H - 92), self.f_peq, (150, 210, 255))
+            extras = [n for n, tem in (("silenciador", self.arma in self.silen), ("mira", self.arma in self.miras)) if tem]
+            if extras:
+                self.texto(" + ".join(extras), (W - 120, H - 92), self.f_peq, (150, 210, 255))
         x = W - 320
         for i, aa in enumerate(ARMAS):
             r = pygame.Rect(x + 4 + i * 34, H - 50, 31, 30)
