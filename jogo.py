@@ -517,6 +517,7 @@ class Jogo:
         self.na_calma = False
         self.agachado = False
         self.console_ativo = False
+        self.console_modo = "comando"
         self.console_txt = ""
         self.moedas = 0
         self.dono = False
@@ -846,7 +847,7 @@ class Jogo:
         rb = getattr(self, "rect_botao_mochila", None)
         if rb and rb.collidepoint(pos):
             return True
-        for nome in ("rect_botao_loja", "rect_botao_dono", "rect_console"):
+        for nome in ("rect_botao_loja", "rect_botao_dono", "rect_console", "rect_codigo"):
             rr = getattr(self, nome, None)
             if rr and rr.collidepoint(pos):
                 return True
@@ -870,6 +871,13 @@ class Jogo:
         rc = getattr(self, "rect_console", None)
         if rc and rc.collidepoint(pos):
             self.console_ativo = True
+            self.console_modo = "comando"
+            return True
+        rk = getattr(self, "rect_codigo", None)
+        if rk and rk.collidepoint(pos):
+            self.console_ativo = True
+            self.console_modo = "codigo"
+            self.console_txt = ""
             return True
         for r, it in getattr(self, "rects_rapidos", ()):
             if r.collidepoint(pos):
@@ -1104,6 +1112,15 @@ class Jogo:
         return s
 
     # ================================================================ loja e modo dono
+    def ativar_dono(self):
+        self.dono = True
+        self.digitado = ""
+        self.recorde["dono"] = True
+        self.gravar_recorde()
+        self.msg("Bem-vindo, DONO! Lá em cima apareceu o lugar de escrever, e do lado do mapa o botão DONO.",
+                 (255, 160, 230))
+        self.salvar()
+
     def comando_dono(self, txt):
         """Comandos que so o dono pode escrever."""
         partes = txt.strip().lower().split()
@@ -1501,7 +1518,13 @@ class Jogo:
             if pygame.K_ESCAPE in tc:
                 self.console_ativo = False
             elif pygame.K_RETURN in tc:
-                self.comando_dono(self.console_txt)
+                if self.console_modo == "codigo":
+                    if self.console_txt.strip().upper() == CODIGO_DONO:
+                        self.ativar_dono()
+                    else:
+                        self.msg("Código errado.", (255, 150, 130))
+                else:
+                    self.comando_dono(self.console_txt)
                 self.console_txt = ""
                 self.console_ativo = False
             elif pygame.K_BACKSPACE in tc:
@@ -1510,13 +1533,7 @@ class Jogo:
                 self.console_txt = (self.console_txt + self.letras)[:40]
             return
         if not self.dono and self.digitado.upper().endswith(CODIGO_DONO):
-            self.dono = True
-            self.digitado = ""
-            self.recorde["dono"] = True
-            self.gravar_recorde()
-            self.msg("Bem-vindo, DONO! Lá em cima apareceu o lugar de escrever, e do lado do mapa o botão DONO.",
-                     (255, 160, 230))
-            self.salvar()
+            self.ativar_dono()
         if pygame.K_c in tc:
             self.agachado = not self.agachado
             self.msg("Agachado: anda devagar, sem barulho, e os zumbis te veem menos." if self.agachado else "Levantou.",
@@ -3299,11 +3316,23 @@ class Jogo:
             pygame.draw.rect(tela, (255, 120, 220) if rd.collidepoint(mouse) else (170, 80, 150), rd, 2, border_radius=12)
             G.desenha_icone(tela, "mochila4", rd.centerx, rd.y + 22, 1.0)
             self.texto("DONO", (rd.centerx, rd.y + 45), self.f_peq, (255, 160, 230), centro=True)
+        self.rect_codigo = None
+        if not self.dono:
+            rk = pygame.Rect(W - 290, 78, 64, 22)
+            self.rect_codigo = rk
+            escrevendo = self.console_ativo and self.console_modo == "codigo"
+            pygame.draw.rect(tela, (20, 18, 20), rk, border_radius=5)
+            pygame.draw.rect(tela, (200, 170, 110) if escrevendo else (80, 74, 70), rk, 1, border_radius=5)
+            if escrevendo:
+                self.texto("*" * len(self.console_txt) + ("|" if int(time.time() * 2) % 2 == 0 else ""),
+                           (rk.x + 5, rk.y + 2), self.f_peq, (240, 220, 180), sombra=False)
+            else:
+                self.texto("código", (rk.centerx, rk.centery), self.f_peq, (130, 120, 110), centro=True, sombra=False)
         self.rect_console = None
         if self.dono:
             rc = pygame.Rect(494, 14, 490, 36)
             self.rect_console = rc
-            ativo = self.console_ativo
+            ativo = self.console_ativo and self.console_modo == "comando"
             pygame.draw.rect(tela, (24, 16, 26) if ativo else (16, 14, 18), rc, border_radius=8)
             pygame.draw.rect(tela, (255, 140, 220) if ativo else (140, 80, 130), rc, 2, border_radius=8)
             if self.console_txt or ativo:
