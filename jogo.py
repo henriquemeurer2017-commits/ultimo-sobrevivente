@@ -2260,7 +2260,13 @@ class Jogo:
         esc = self.escuridao()
         # quantos zumbis a regiao aguenta (regiao calma = nenhum)
         dl = self.dens_local()
-        alvo = round((2 + min(self.dia * 0.4, 10) + 4 * esc + (4 if m.cidade_perto(p.x, p.y, 1.4) else 0)) * dl)
+        alvo = round((2 + min(self.dia * 0.4, 10) + 4 * esc) * dl)
+        # cidades e vilas tem zumbi andando pelas ruas, de dia tambem (a regiao calma do comeco continua calma)
+        cid = m.cidade_perto(p.x, p.y, 1.3)
+        na_cidade = cid is not None and m.densidade(p.x, p.y) > 0
+        if na_cidade:
+            base = 7 if cid["tipo"] == "cidade" else 4
+            alvo = max(alvo, round(base + min(self.dia * 0.4, 6) + 3 * esc))
         if self.resgate is not None:
             alvo = 75
         seguro = self.em_zona_segura(p.x, p.y)
@@ -2273,7 +2279,7 @@ class Jogo:
                 self.msg("Saindo da região calma. Cuidado.", (240, 190, 140))
         self.t_spawn -= dt
         if self.t_spawn <= 0 and len(self.zumbis) < alvo:
-            self.t_spawn = 0.12 if self.resgate is not None else 5.0
+            self.t_spawn = 0.12 if self.resgate is not None else (2.2 if na_cidade else 5.0)
             self.criar_zumbi(esc)
         visao = 190 * (1 - esc) + esc * (150 if self.lanterna else 95)
         if self.chuva:
@@ -2326,9 +2332,14 @@ class Jogo:
                     z.viu = max(0, z.viu - 0.25)
                     z.t_vagar -= 0.25
                     if z.t_vagar <= 0:
-                        z.ang = random.uniform(0, 6.283)
+                        if na_cidade and d > 300 and random.random() < 0.45:
+                            # na cidade eles andam pelas ruas, chegando aos poucos perto de voce
+                            z.ang = math.atan2(p.y - z.y, p.x - z.x) + random.uniform(-0.8, 0.8)
+                            z.parado = False
+                        else:
+                            z.ang = random.uniform(0, 6.283)
+                            z.parado = random.random() < 0.4
                         z.t_vagar = random.uniform(2, 7)
-                        z.parado = random.random() < 0.4
             if z.estado == "perseguir":
                 z.alvo = (p.x, p.y)
             if z.estado in ("perseguir", "investigar") and z.alvo:
@@ -2440,7 +2451,12 @@ class Jogo:
         m = self.mundo
         for _ in range(12):
             a = random.uniform(0, 6.283)
-            d = random.uniform(1150, 1500) if self.resgate is None else random.uniform(700, 1000)
+            if self.resgate is not None:
+                d = random.uniform(700, 1000)
+            elif m.cidade_perto(p.x, p.y, 1.3):  # na cidade nasce mais perto (mas fora da tela), dentro da cidade
+                d = random.uniform(760, 1050)
+            else:
+                d = random.uniform(1150, 1500)
             x = p.x + math.cos(a) * d
             y = p.y + math.sin(a) * d
             if not (40 < x < N * T - 40 and 40 < y < N * T - 40):
