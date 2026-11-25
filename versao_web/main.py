@@ -9,6 +9,7 @@ O jogo de verdade esta em jogo.py; este arquivo so roda um quadro por vez
 e guarda o jogo salvo no navegador (localStorage) para nao perder ao fechar a aba.
 """
 import asyncio
+import json
 import os
 import sys
 import time
@@ -37,6 +38,16 @@ def restaurar():
     ls = _armazem()
     if ls is None:
         return
+    # todos os mundos ficam numa chave so (um dicionario arquivo -> conteudo)
+    try:
+        txt = ls.getItem("ultimo_mundos")
+        if txt:
+            os.makedirs(config.MUNDOS_DIR, exist_ok=True)
+            for nome, conteudo in json.loads(str(txt)).items():
+                with open(os.path.join(config.MUNDOS_DIR, nome), "w", encoding="utf-8") as f:
+                    f.write(conteudo)
+    except Exception:
+        pass
     for chave, caminho in GUARDAR.items():
         try:
             txt = ls.getItem(chave)
@@ -54,6 +65,19 @@ def guardar():
     ls = _armazem()
     if ls is None:
         return
+    try:
+        mundos = {}
+        if os.path.isdir(config.MUNDOS_DIR):
+            for nome in sorted(os.listdir(config.MUNDOS_DIR)):
+                if nome.endswith(".json"):
+                    with open(os.path.join(config.MUNDOS_DIR, nome), encoding="utf-8") as f:
+                        mundos[nome] = f.read()
+        txt = json.dumps(mundos)
+        if _ultimo.get("ultimo_mundos") != txt:
+            ls.setItem("ultimo_mundos", txt)
+            _ultimo["ultimo_mundos"] = txt
+    except Exception:
+        pass
     for chave, caminho in GUARDAR.items():
         try:
             if os.path.exists(caminho):

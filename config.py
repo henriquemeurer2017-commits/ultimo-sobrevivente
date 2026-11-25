@@ -5,6 +5,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SAVE_FILE = os.path.join(HERE, "save.json")
 RECORDE_FILE = os.path.join(HERE, "recorde.json")
 ERRO_FILE = os.path.join(HERE, "erro.txt")
+MUNDOS_DIR = os.path.join(HERE, "mundos")   # cada mundo salvo fica num arquivo aqui
 
 W, H = 1280, 720
 FPS = 60
@@ -41,10 +42,16 @@ ITENS = {
     "kit": "Kit médico",
     "9mm": "Balas 9mm",
     "12": "Cartuchos cal.12",
-    "556": "Munição de fuzil",
-    "308": "Munição de rifle",
+    "556": "Munição de AK-47",
+    "308": "Munição de sniper",
     "silenciador": "Silenciador",
     "flecha": "Flechas",
+    "foguete": "Foguetes de RPG",
+    "katana": "Katana",
+    "minigun": "Minigun",
+    "dragao": "Escopeta Dragão",
+    "dourado": "Sniper Dourado",
+    "rpg": "RPG",
     "mira": "Mira (luneta)",
     "facao": "Facão",
     "smg": "Submetralhadora",
@@ -63,8 +70,8 @@ ITENS = {
     "machado": "Machado",
     "pistola": "Pistola",
     "espingarda": "Espingarda",
-    "fuzil": "Fuzil de assalto",
-    "rifle": "Rifle de precisão",
+    "fuzil": "AK-47",
+    "rifle": "Sniper",
 }
 
 ARMAS = [
@@ -74,21 +81,43 @@ ARMAS = [
          balas=1, alcance=720, recarga=1.3, ruido=800, auto=False, silencia=True, fura=0),
     dict(id="espingarda", nome="Espingarda", melee=False, mun="12", pente=6, dano=17, cd=0.8, disp=0.15,
          balas=9, alcance=380, recarga=2.6, ruido=1100, auto=False, silencia=False, fura=0),
-    dict(id="fuzil", nome="Fuzil de assalto", melee=False, mun="556", pente=30, dano=30, cd=0.095, disp=0.05,
+    dict(id="fuzil", nome="AK-47", melee=False, mun="556", pente=30, dano=30, cd=0.095, disp=0.05,
          balas=1, alcance=950, recarga=2.2, ruido=1100, auto=True, silencia=True, fura=1),
-    dict(id="rifle", nome="Rifle de precisão", melee=False, mun="308", pente=5, dano=150, cd=1.1, disp=0.004,
+    dict(id="rifle", nome="Sniper", melee=False, mun="308", pente=5, dano=150, cd=1.1, disp=0.004,
          balas=1, alcance=1500, recarga=2.6, ruido=1400, auto=False, silencia=True, fura=3),
     dict(id="facao", nome="Facão", melee=True, dano=58, cd=0.42, alcance=60, ruido=0),
     dict(id="smg", nome="Submetralhadora", melee=False, mun="9mm", pente=32, dano=19, cd=0.065, disp=0.075,
          balas=1, alcance=650, recarga=1.8, ruido=900, auto=True, silencia=True, fura=0),
     dict(id="besta", nome="Besta", melee=False, mun="flecha", pente=1, dano=130, cd=0.3, disp=0.008,
          balas=1, alcance=950, recarga=1.3, ruido=30, auto=False, silencia=False, fura=1),
+    # armas lendarias: so na LOJA, compradas com moedinhas
+    dict(id="katana", nome="Katana", melee=True, dano=140, cd=0.28, alcance=74, ruido=0, loja=150,
+         desc="Corta rápido e forte. Sem barulho."),
+    dict(id="dragao", nome="Escopeta Dragão", melee=False, mun="12", pente=12, dano=28, cd=0.3, disp=0.13,
+         balas=12, alcance=520, recarga=2.0, ruido=1200, auto=True, silencia=False, fura=1, loja=250,
+         desc="Escopeta automática: 12 chumbos por tiro."),
+    dict(id="minigun", nome="Minigun", melee=False, mun="556", pente=150, dano=30, cd=0.035, disp=0.06,
+         balas=1, alcance=900, recarga=3.0, ruido=1300, auto=True, silencia=False, fura=2, loja=300,
+         desc="150 balas sem parar. Usa munição de AK-47."),
+    dict(id="rpg", nome="RPG", melee=False, mun="foguete", pente=1, dano=320, cd=0.5, disp=0.01,
+         balas=1, alcance=900, recarga=2.2, ruido=1800, auto=False, silencia=False, fura=0, explode=True, loja=350,
+         desc="Foguete que EXPLODE e derruba vários zumbis."),
+    dict(id="dourado", nome="Sniper Dourado", melee=False, mun="308", pente=10, dano=420, cd=0.45, disp=0.002,
+         balas=1, alcance=1800, recarga=2.0, ruido=600, auto=False, silencia=True, fura=8, loja=400,
+         desc="Atravessa 8 zumbis. 10 tiros no pente."),
 ]
+# pacotes da loja: (nome, itens, preco em moedas)
+LOJA_PACOTES = [("Munição de AK-47 x120", {"556": 120}, 25), ("Cartuchos x40", {"12": 40}, 20),
+                ("Munição de sniper x30", {"308": 30}, 25), ("Foguetes de RPG x5", {"foguete": 5}, 40),
+                ("Kit médico x3", {"kit": 3}, 30)]
+CODIGO_DONO = "DONO"
+MOEDAS_ZERAR = 6          # moedas ganhas cada vez que zera o jogo (resgate)
 # bancada: nivel maximo das melhorias
 NIVEL_MAX = 3
 MOCHILA_EXTRA = 40      # espaco a mais por nivel de reforco da mochila
 # quanto a tela treme em cada tiro
-TREMOR = {"pistola": 2.5, "espingarda": 8, "fuzil": 2.2, "rifle": 9, "smg": 1.8, "besta": 1.5}
+TREMOR = {"pistola": 2.5, "espingarda": 8, "fuzil": 2.2, "rifle": 9, "smg": 1.8, "besta": 1.5, "minigun": 2,
+          "dragao": 9, "dourado": 9, "rpg": 16}
 ARMA_IDX = {a["id"]: i for i, a in enumerate(ARMAS)}
 ARMAS_IDS = set(ARMA_IDX)
 
@@ -123,7 +152,7 @@ NOMES_MOVEIS = {
 # espaco que cada unidade ocupa na mochila
 ESPACO = {"comida": 1, "agua": 1, "bandagem": 0.5, "kit": 1.5, "9mm": 0.04, "12": 0.08, "556": 0.04, "308": 0.08,
           "tabua": 1, "sucata": 1, "ferramentas": 2, "seringa": 0.5, "saco": 4,
-          "flecha": 0.15, "mira": 0.5}
+          "flecha": 0.15, "mira": 0.5, "foguete": 1}
 # estacoes do ano: cada uma dura 6 dias. (nome, multiplica cor, soma cor, fome x, sede x)
 ESTACOES = [("Verão", (1.04, 1.02, 0.92), (8, 6, 0), 1.0, 1.35),
             ("Outono", (1.12, 0.92, 0.70), (14, 4, 0), 1.0, 1.0),

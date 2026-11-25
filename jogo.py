@@ -128,7 +128,8 @@ class Jogo:
             self.f_morte = pygame.font.Font(None, 210)
             self.f_morte.set_bold(True)
         self.sons = G.criar_sons()
-        for novo, base in (("smg", "pistola"), ("besta", "clique"), ("facao", "faca")):
+        for novo, base in (("smg", "pistola"), ("besta", "clique"), ("facao", "faca"), ("katana", "faca"),
+                           ("minigun", "fuzil"), ("dragao", "espingarda"), ("dourado", "rifle"), ("rpg", "espingarda")):
             if novo not in self.sons and base in self.sons:
                 self.sons[novo] = self.sons[base]
         self.rnd = random.Random()
@@ -196,7 +197,50 @@ class Jogo:
             pass
 
     def tem_save(self):
-        return os.path.exists(SAVE_FILE)
+        return bool(self.listar_mundos())
+
+    def caminho_save(self):
+        return self.__dict__.get("arq") or SAVE_FILE
+
+    def listar_mundos(self):
+        """Todos os mundos salvos: [(arquivo, nome, dia, zumbis, quando)], o mais recente primeiro."""
+        os.makedirs(MUNDOS_DIR, exist_ok=True)
+        # o jogo salvo antigo (de antes dos mundos) vira "Meu mundo"
+        if os.path.exists(SAVE_FILE) and os.path.dirname(os.path.abspath(SAVE_FILE)) == os.path.abspath(HERE):
+            try:
+                with open(SAVE_FILE, encoding="utf-8") as f:
+                    d = json.load(f)
+                d.setdefault("nome", "Meu mundo")
+                destino = os.path.join(MUNDOS_DIR, "mundo_1.json")
+                k = 1
+                while os.path.exists(destino):
+                    k += 1
+                    destino = os.path.join(MUNDOS_DIR, f"mundo_{k}.json")
+                with open(destino, "w", encoding="utf-8") as f:
+                    json.dump(d, f)
+                os.remove(SAVE_FILE)
+            except Exception:
+                pass
+        lista = []
+        for nome in os.listdir(MUNDOS_DIR):
+            if not nome.endswith(".json"):
+                continue
+            arq = os.path.join(MUNDOS_DIR, nome)
+            try:
+                with open(arq, encoding="utf-8") as f:
+                    d = json.load(f)
+                lista.append((arq, d.get("nome", "Mundo"), d.get("dia", 1), d.get("mortes", 0), os.path.getmtime(arq)))
+            except Exception:
+                continue
+        lista.sort(key=lambda m: -m[4])
+        return lista
+
+    def arquivo_novo(self):
+        os.makedirs(MUNDOS_DIR, exist_ok=True)
+        k = 1
+        while os.path.exists(os.path.join(MUNDOS_DIR, f"mundo_{k}.json")):
+            k += 1
+        return os.path.join(MUNDOS_DIR, f"mundo_{k}.json")
 
     # ================================================================ loop
     def rodar(self):
@@ -216,11 +260,16 @@ class Jogo:
         self.click_dir = False
         self.teclas = set()
         self.roda = 0
+        self.letras = ""
         for e in pygame.event.get():
             if e.type == pygame.QUIT:
                 self.sair()
             elif e.type == pygame.KEYDOWN:
                 self.teclas.add(e.key)
+                if getattr(e, "unicode", ""):
+                    self.digitado = (self.__dict__.get("digitado", "") + e.unicode)[-12:]
+                    if e.unicode.isprintable():
+                        self.letras += e.unicode
                 if e.key == pygame.K_F11:
                     try:
                         pygame.display.toggle_fullscreen()
@@ -319,15 +368,10 @@ class Jogo:
         self.texto("ÚLTIMO SOBREVIVENTE", (W // 2, 140), self.f_titulo, (225, 70, 55), centro=True)
         self.texto("um apocalipse zumbi em mundo aberto", (W // 2, 205), self.f_med2, (210, 200, 190), centro=True)
         y = 290
-        if self.tem_save():
-            if self.botao("Continuar", W // 2, y):
-                self.carregar()
-                return
-            y += 64
-        if self.botao("Novo jogo", W // 2, y):
-            self.estado = "confirmar" if self.tem_save() else "jogo"
-            if self.estado == "jogo":
-                self.novo_jogo()
+        if self.botao("Jogar", W // 2, y):
+            self.estado = "mundos"
+            self.nome_novo = ""
+            self.apagar_qual = None
             return
         y += 64
         if self.botao("Como jogar", W // 2, y):
@@ -338,6 +382,68 @@ class Jogo:
         rec = self.recorde
         self.texto(f"Recorde: {rec.get('dias', 0)} dias  ·  {rec.get('zumbis', 0)} zumbis  ·  resgates: {rec.get('resgates', 0)}",
                    (W // 2, H - 40), self.f_peq, (170, 160, 150), centro=True)
+
+    def tela_mundos(self, dt):
+        """Escolher o mundo para jogar, ou criar um mundo novo com nome."""
+        self.desenhar_fundo_menu(dt)
+        if pygame.K_ESCAPE in self.teclas:
+            self.estado = "menu"
+            return
+        self.texto("SEUS MUNDOS", (W // 2, 54), self.f_titulo, (225, 70, 55), centro=True)
+        mundos = self.listar_mundos()
+        caixa = pygame.Rect(W // 2 - 380, 104, 760, 400)
+        self.painel(caixa, 200)
+        if not mundos:
+            self.texto("Você ainda não tem nenhum mundo. Crie um aí embaixo!", (W // 2, caixa.centery), self.f_med2,
+                       (210, 200, 190), centro=True)
+        mouse = pygame.mouse.get_pos()
+        for i, (arq, nome, dia, mortes, _) in enumerate(mundos[:6]):
+            r = pygame.Rect(caixa.x + 16, caixa.y + 14 + i * 64, caixa.w - 32, 56)
+            pygame.draw.rect(self.tela, (52, 40, 34) if r.collidepoint(mouse) else (34, 30, 28), r, border_radius=10)
+            G.desenha_icone(self.tela, "mochila3", r.x + 30, r.centery, 1.3)
+            self.texto(nome, (r.x + 60, r.y + 6), self.f_med, (240, 225, 200))
+            self.texto(f"Dia {dia}   ·   {mortes} zumbis derrubados", (r.x + 60, r.y + 31), self.f_peq, (190, 180, 170))
+            if self.botao_peq("Jogar", pygame.Rect(r.right - 230, r.y + 10, 110, 36), (60, 90, 50)):
+                self.carregar(arq)
+                return
+            certeza = self.__dict__.get("apagar_qual") == arq
+            if self.botao_peq("Certeza?" if certeza else "Apagar", pygame.Rect(r.right - 112, r.y + 10, 100, 36),
+                              (130, 30, 26) if certeza else (60, 34, 30)):
+                if certeza:
+                    try:
+                        os.remove(arq)
+                    except Exception:
+                        pass
+                    self.apagar_qual = None
+                else:
+                    self.apagar_qual = arq
+        if len(mundos) > 6:
+            self.texto(f"(+{len(mundos) - 6} mundos mais antigos)", (W // 2, caixa.bottom - 16), self.f_peq,
+                       (170, 160, 150), centro=True)
+        # mundo novo com nome
+        nome = self.__dict__.get("nome_novo", "")
+        if pygame.K_BACKSPACE in self.teclas:
+            nome = nome[:-1]
+        elif self.letras and pygame.K_RETURN not in self.teclas:
+            nome = (nome + self.letras)[:22]
+        self.nome_novo = nome
+        self.texto("MUNDO NOVO  ·  escreva o nome dele:", (W // 2 - 380, 524), self.f_med, (255, 220, 140))
+        campo = pygame.Rect(W // 2 - 380, 556, 500, 50)
+        pygame.draw.rect(self.tela, (20, 18, 18), campo, border_radius=8)
+        pygame.draw.rect(self.tela, (200, 150, 90), campo, 2, border_radius=8)
+        pisca = "|" if int(time.time() * 2) % 2 == 0 else ""
+        self.texto((nome or "") + pisca if nome else "ex.: Mundo do Leandro" + pisca, (campo.x + 14, campo.y + 12),
+                   self.f_med2, (240, 235, 225) if nome else (120, 115, 110))
+        criar = self.botao_peq("Criar mundo", pygame.Rect(campo.right + 12, campo.y + 2, 248, 46), (60, 90, 50))
+        if criar or (pygame.K_RETURN in self.teclas):
+            nome_final = nome.strip() or f"Mundo {len(mundos) + 1}"
+            self.arq = self.arquivo_novo()
+            self.nome_mundo = nome_final
+            self.novo_jogo()
+            self.salvar()
+            return
+        if self.botao("Voltar", W // 2, 640, w=220):
+            self.estado = "menu"
 
     def tela_confirmar(self, dt):
         self.desenhar_fundo_menu(dt)
@@ -360,7 +466,7 @@ class Jogo:
             "Botão direito: mirar com calma   ·   R: recarregar   ·   1 a 6: trocar de arma   ·   ESPAÇO: esquiva rápida",
             "E: revistar armários, carros e caixas  ·  beber água no lago  ·  dormir  ·  cortar árvore (com machado)",
             "F: comer   ·   G: beber água   ·   H: bandagem   ·   J: kit médico",
-            "B: construir (a BANCADA melhora armas e mochila)  ·  L: lanterna  ·  M: mapa  ·  V: MOCHILA",
+            "B: construir (BANCADA melhora armas)  ·  L: lanterna  ·  M: mapa  ·  V: MOCHILA  ·  K: LOJA",
             "",
             "Fique de olho nas barras de VIDA, FOME e SEDE. Se a fome ou a sede zerarem, você perde vida.",
             "Hospital cura. Bunker e SACO DE DORMIR servem para dormir e salvar. A SERINGA (rara, nos bunkers) cura tudo.",
@@ -409,6 +515,10 @@ class Jogo:
         self.acao = None
         self.t_spawn = 0.0
         self.na_calma = False
+        self.moedas = 0
+        self.dono = False
+        self.mochila_infinita = False
+        self.digitado = ""
         self.niveis = {}
         self.miras = []
         self.reforco_mochila = 0
@@ -445,6 +555,9 @@ class Jogo:
         self.p = Jogador(*m.inicio)
         self.respawn = list(m.inicio)
         self.inv = {"comida": 1, "agua": 1, "bandagem": 1}
+        self.moedas = self.recorde.get("moedas", 0)
+        if self.recorde.get("dono"):
+            self.dono = True
         self.armas = ["faca"]
         self.pente = {}
         self.silen = []
@@ -464,6 +577,9 @@ class Jogo:
     def salvar(self):
         if self.mundo is None or getattr(self, "p", None) is None:
             return
+        if self.recorde.get("moedas") != self.moedas:  # moedas valem para todos os mundos
+            self.recorde["moedas"] = self.moedas
+            self.gravar_recorde()
         m = self.mundo
         extras = [dict(x=mv["x"], y=mv["y"], tipo=mv["tipo"], itens=mv["itens"], aberto=mv["aberto"])
                   for mv in m.moveis[self.n_moveis_base:] if mv["tipo"] == "mochila" and not mv["aberto"]]
@@ -477,19 +593,26 @@ class Jogo:
             explorado=self.explorado.hex(), lanterna=self.lanterna, nivel_mochila=self.nivel_mochila,
             feridas=[self.p.sangrando, self.p.perna, self.p.braco],
             niveis=self.niveis, miras=self.miras, reforco_mochila=self.reforco_mochila,
+            moedas=self.moedas, dono=self.dono, mochila_infinita=self.mochila_infinita,
+            nome=self.__dict__.get("nome_mundo", "Meu mundo"),
         )
         try:
-            tmp = SAVE_FILE + ".tmp"
+            arq = self.caminho_save()
+            os.makedirs(os.path.dirname(arq), exist_ok=True)
+            tmp = arq + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(dados, f)
-            os.replace(tmp, SAVE_FILE)
+            os.replace(tmp, arq)
         except Exception as e:
             self.msg(f"Não consegui salvar: {e}", (255, 120, 100))
 
-    def carregar(self):
+    def carregar(self, arq=None):
+        if arq:
+            self.arq = arq
         try:
-            with open(SAVE_FILE, encoding="utf-8") as f:
+            with open(self.caminho_save(), encoding="utf-8") as f:
                 d = json.load(f)
+            self.nome_mundo = d.get("nome", "Meu mundo")
         except Exception:
             self.msg("Save estragado, começando de novo.")
             self.novo_jogo()
@@ -515,6 +638,9 @@ class Jogo:
         self.niveis = d.get("niveis", {})
         self.miras = d.get("miras", [])
         self.reforco_mochila = d.get("reforco_mochila", 0)
+        self.moedas = self.recorde.get("moedas", d.get("moedas", 0))
+        self.dono = d.get("dono", False) or self.recorde.get("dono", False)
+        self.mochila_infinita = d.get("mochila_infinita", False)
         self.p.sangrando, self.p.perna, self.p.braco = d.get("feridas", [False, False, False])
         self.armas = d["armas"]
         self.pente = d["pente"]
@@ -640,7 +766,7 @@ class Jogo:
             if not a["melee"]:
                 self.pente[item] = self.rnd.randint(1, a["pente"])
             if avisar:
-                self.msg(f"Achou uma arma: {a['nome']}!  (tecla {ARMA_IDX[item] + 1})", (255, 220, 120))
+                self.msg(f"Achou uma arma: {a['nome']}!  (tecla {(self.armas.index(item) + 1) % 10})", (255, 220, 120))
             if self.arma == "faca":
                 self.arma = item
                 self.recarga_t = 0
@@ -717,6 +843,10 @@ class Jogo:
         rb = getattr(self, "rect_botao_mochila", None)
         if rb and rb.collidepoint(pos):
             return True
+        for nome in ("rect_botao_loja", "rect_botao_dono"):
+            rr = getattr(self, nome, None)
+            if rr and rr.collidepoint(pos):
+                return True
         rc = getattr(self, "rect_painel_construir", None)
         return bool(rc and self.modo_construir is not None and rc.collidepoint(pos))
 
@@ -725,6 +855,14 @@ class Jogo:
         rb = getattr(self, "rect_botao_mochila", None)
         if rb and rb.collidepoint(pos):
             self.abrir_mochila()
+            return True
+        rl = getattr(self, "rect_botao_loja", None)
+        if rl and rl.collidepoint(pos):
+            self.estado = "loja"
+            return True
+        rd = getattr(self, "rect_botao_dono", None)
+        if rd and rd.collidepoint(pos):
+            self.tudo_do_melhor()
             return True
         for r, it in getattr(self, "rects_rapidos", ()):
             if r.collidepoint(pos):
@@ -866,12 +1004,24 @@ class Jogo:
         lista = [k for k in ITENS if k in ESPACO or k == "peca"]
         lista = [k for k in lista if self.inv.get(k, 0) > 0]
         x0, y0 = 450, 146
-        cw, ch = 384, 62
         if not lista:
             self.texto("Sua mochila está vazia.", (x0, y0), self.f_med2, (170, 165, 160))
-        for i, it in enumerate(lista):
-            r = pygame.Rect(x0 + (i % 2) * (cw + 12), y0 + (i // 2) * (ch + 8), cw, ch)
+        compacto = len(lista) > 8  # muita coisa: 3 colunas menores para caber tudo
+        cols = 3 if compacto else 2
+        cw, ch = (256, 44) if compacto else (384, 62)
+        for i, it in enumerate(lista[:18]):
+            r = pygame.Rect(x0 + (i % cols) * (cw + 8), y0 + (i // cols) * (ch + 7), cw, ch)
             pygame.draw.rect(tela, (34, 36, 40), r, border_radius=8)
+            if compacto:
+                G.desenha_icone(tela, it, r.x + 18, r.centery, 1.0)
+                self.texto(ITENS[it][:18], (r.x + 36, r.y + 3), self.f_peq)
+                self.texto(f"x{self.inv[it]}", (r.x + 36, r.y + 22), self.f_peq, (200, 195, 180))
+                bx = r.right - 54
+                if it in acoes and self.botao_peq(acoes[it][:6], pygame.Rect(bx - 60, r.y + 8, 56, 28)):
+                    self.usar(it)
+                if it != "peca" and self.botao_peq("Largar", pygame.Rect(bx, r.y + 8, 50, 28), (44, 40, 38)):
+                    self.largar(it)
+                continue
             G.desenha_icone(tela, it, r.x + 28, r.centery, 1.4)
             self.texto(ITENS[it], (r.x + 52, r.y + 8), self.f_med2)
             self.texto(f"x{self.inv[it]}", (r.x + 52, r.y + 32), self.f_peq, (200, 195, 180))
@@ -884,24 +1034,29 @@ class Jogo:
         # armas
         ya = 486
         self.texto("ARMAS (clique para usar)", (450, ya), self.f_med, (255, 220, 140))
-        for i, a in enumerate(ARMAS):
-            r = pygame.Rect(450 + i * 88, ya + 30, 84, 70)
+        minhas = [ARMAS[ARMA_IDX[k]] for k in self.armas]
+        lw = min(88, 792 // max(1, len(minhas)))
+        for i, a in enumerate(minhas):
+            r = pygame.Rect(450 + i * lw, ya + 30, lw - 4, 70)
             tem = a["id"] in self.armas
             pygame.draw.rect(tela, (34, 36, 40), r, border_radius=8)
             if a["id"] == self.arma:
                 pygame.draw.rect(tela, (230, 190, 90), r, 2, border_radius=8)
             if tem:
-                G.desenha_icone(tela, a["id"], r.centerx, r.y + 22, 1.1)
-                self.texto(a["nome"].split(" ")[0][:11], (r.centerx, r.y + 44), self.f_peq, centro=True)
-                if not a["melee"]:
+                G.desenha_icone(tela, a["id"], r.centerx, r.y + 22, 1.1 if lw >= 80 else 0.8)
+                if lw >= 80:
+                    self.texto(a["nome"].split(" ")[0][:11], (r.centerx, r.y + 44), self.f_peq, centro=True)
+                else:  # muita arma: mostra so o numero da tecla
+                    self.texto(str((i + 1) % 10) if i < 10 else "", (r.centerx, r.y + 44), self.f_peq, centro=True)
+                if not a["melee"] and lw >= 80:
                     extra = f"{self.pente.get(a['id'], 0)}+{self.inv.get(a['mun'], 0)}"
                     if a["id"] in self.silen:
                         extra += " S"
                     if a["id"] in self.miras:
                         extra += " M"
+                    self.texto(extra, (r.centerx, r.y + 60), self.f_peq, (200, 195, 180), centro=True)
                 if self.niveis.get(a["id"]):
                     self.texto(f"+{self.niveis[a['id']]}", (r.right - 22, r.y + 2), self.f_peq, (255, 210, 90), sombra=False)
-                    self.texto(extra, (r.centerx, r.y + 60), self.f_peq, (200, 195, 180), centro=True)
                 if self.click and r.collidepoint(pygame.mouse.get_pos()):
                     self.trocar_arma(a["id"])
             else:
@@ -941,6 +1096,114 @@ class Jogo:
         del arr
         return s
 
+    # ================================================================ loja e modo dono
+    def tudo_do_melhor(self):
+        """Botao do dono: mochila infinita e tudo do melhor."""
+        self.dono = True
+        self.mochila_infinita = True
+        self.nivel_mochila = len(MOCHILAS) - 1
+        self.reforco_mochila = NIVEL_MAX
+        for a in ARMAS:
+            if a["id"] not in self.armas:
+                self.armas.append(a["id"])
+            self.niveis[a["id"]] = NIVEL_MAX
+            if not a["melee"]:
+                self.pente[a["id"]] = self.arma_melhorada(a["id"])["pente"]
+                if a["id"] not in self.miras:
+                    self.miras.append(a["id"])
+                if a.get("silencia") and a["id"] not in self.silen:
+                    self.silen.append(a["id"])
+        self.armas.sort(key=lambda i: ARMA_IDX[i])
+        self.cache_arma = {}
+        for k, q in (("9mm", 999), ("12", 999), ("556", 999), ("308", 999), ("flecha", 999), ("foguete", 999),
+                     ("comida", 99), ("agua", 99), ("kit", 50), ("bandagem", 50), ("seringa", 20), ("saco", 1),
+                     ("tabua", 300), ("sucata", 300), ("ferramentas", 30)):
+            self.inv[k] = max(self.inv.get(k, 0), q)
+        self.moedas = max(self.moedas, 999999)
+        self.p.vida = 100
+        self.p.curar_tudo()
+        self.msg("MODO DONO: mochila infinita e tudo do melhor!", (255, 160, 230))
+        self.som("golpe", 0.8)
+        self.salvar()
+
+    def tela_loja(self, dt):
+        tc = self.teclas
+        if pygame.K_ESCAPE in tc or pygame.K_k in tc:
+            self.estado = "jogo"
+            return
+        # codigo secreto do dono
+        if not self.dono and self.digitado.upper().endswith(CODIGO_DONO):
+            self.dono = True
+            self.digitado = ""
+            self.recorde["dono"] = True
+            self.gravar_recorde()
+            self.msg("Bem-vindo, DONO do jogo! Clique no botão DONO para ter tudo.", (255, 160, 230))
+            self.salvar()
+        self.desenhar()
+        tela = self.tela
+        sh = pygame.Surface((W, H), pygame.SRCALPHA)
+        sh.fill((0, 0, 0, 185))
+        tela.blit(sh, (0, 0))
+        caixa = pygame.Rect(120, 22, 1040, 676)
+        self.painel(caixa, 232)
+        self.texto("LOJA", (caixa.x + 24, caixa.y + 10), self.f_grande, (255, 220, 110))
+        pygame.draw.circle(tela, (120, 90, 20), (caixa.x + 150, caixa.y + 34), 13)
+        pygame.draw.circle(tela, (240, 200, 70), (caixa.x + 150, caixa.y + 34), 11)
+        self.texto("modo DONO: tudo de graça" if self.dono else f"{self.moedas} moedas", (caixa.x + 172, caixa.y + 20),
+                   self.f_med, (255, 220, 110))
+        self.texto(f"Moedas: ganhe {MOEDAS_ZERAR} cada vez que ZERAR o jogo (chamar o resgate na torre), ou compre.",
+                   (caixa.x + 26, caixa.y + 62), self.f_peq, (200, 195, 180))
+        rp = pygame.Rect(caixa.right - 420, caixa.y + 16, 286, 36)
+        self.botao_peq("Comprar moedas com Pix: em breve", rp, (40, 40, 44), False)
+        if self.botao_peq("Fechar (K)", pygame.Rect(caixa.right - 120, caixa.y + 16, 104, 36)):
+            self.estado = "jogo"
+            return
+        self.texto("ARMAS LENDÁRIAS (só aqui na loja)", (caixa.x + 26, caixa.y + 92), self.f_med, (255, 200, 120))
+        y = caixa.y + 122
+        for a in [a for a in ARMAS if a.get("loja")]:
+            r = pygame.Rect(caixa.x + 20, y, caixa.w - 40, 56)
+            pygame.draw.rect(tela, (40, 34, 26), r, border_radius=8)
+            G.desenha_icone(tela, a["id"], r.x + 40, r.centery, 1.5)
+            self.texto(a["nome"], (r.x + 84, r.y + 5), self.f_med, (255, 230, 170))
+            self.texto(a.get("desc", ""), (r.x + 84, r.y + 31), self.f_peq, (210, 200, 185))
+            tem = a["id"] in self.armas
+            if tem:
+                self.texto("JÁ É SUA", (r.right - 130, r.y + 16), self.f_med2, (160, 230, 160))
+            else:
+                preco = 0 if self.dono else a["loja"]
+                self.texto("grátis" if self.dono else f"{a['loja']} moedas", (r.right - 300, r.y + 17), self.f_med2,
+                           (255, 220, 110))
+                pode = self.moedas >= preco
+                if self.botao_peq("Comprar", pygame.Rect(r.right - 140, r.y + 10, 124, 36), (70, 54, 20), pode):
+                    if pode:
+                        self.moedas -= preco
+                        self.dar(a["id"], 1, avisar=False)
+                        if not a["melee"]:
+                            self.inv[a["mun"]] = self.inv.get(a["mun"], 0) + a["pente"] * 2
+                        self.msg(f"Você comprou: {a['nome']}!", (255, 220, 120))
+                        self.som("golpe", 0.6)
+                        self.salvar()
+            y += 62
+        self.texto("MUNIÇÃO E CURA", (caixa.x + 26, y + 4), self.f_med, (255, 200, 120))
+        y += 34
+        for i, (nome, itens, preco) in enumerate(LOJA_PACOTES):
+            r = pygame.Rect(caixa.x + 20 + (i % 3) * 336, y + (i // 3) * 52, 328, 46)
+            pygame.draw.rect(tela, (34, 36, 40), r, border_radius=8)
+            G.desenha_icone(tela, next(iter(itens)), r.x + 26, r.centery, 1.1)
+            self.texto(nome, (r.x + 50, r.y + 4), self.f_peq, (235, 230, 220))
+            p0 = 0 if self.dono else preco
+            self.texto("grátis" if self.dono else f"{preco} moedas", (r.x + 50, r.y + 24), self.f_peq, (255, 220, 110))
+            pode = self.moedas >= p0
+            if self.botao_peq("Comprar", pygame.Rect(r.right - 104, r.y + 7, 94, 32), (70, 54, 20), pode):
+                if pode:
+                    self.moedas -= p0
+                    for k, q in itens.items():
+                        self.inv[k] = self.inv.get(k, 0) + q
+                    self.msg(f"Comprou: {nome}", (255, 220, 120))
+                    self.salvar()
+        self.texto("A MIRA (luneta) não se compra: você acha no mapa, nas casas e nos bunkers.",
+                   (caixa.x + 26, caixa.bottom - 30), self.f_peq, (170, 200, 230))
+
     # ================================================================ bancada
     def tela_bancada(self, dt):
         tc = self.teclas
@@ -963,10 +1226,11 @@ class Jogo:
             self.estado = "jogo"
             return
         y = caixa.y + 116
+        passo = min(54, 440 // max(1, len(self.armas)))
         for ida in self.armas:
             a = ARMAS[ARMA_IDX[ida]]
             n = self.niveis.get(ida, 0)
-            r = pygame.Rect(caixa.x + 20, y, caixa.w - 40, 48)
+            r = pygame.Rect(caixa.x + 20, y, caixa.w - 40, passo - 6)
             pygame.draw.rect(tela, (34, 36, 40), r, border_radius=8)
             G.desenha_icone(tela, ida, r.x + 34, r.centery, 1.3)
             self.texto(a["nome"], (r.x + 70, r.y + 4), self.f_med2)
@@ -991,7 +1255,7 @@ class Jogo:
                         self.salvar()
             else:
                 self.texto("NO MÁXIMO", (r.right - 130, r.y + 14), self.f_med2, (255, 210, 90))
-            y += 54
+            y += passo
         # mochila
         y += 6
         r = pygame.Rect(caixa.x + 20, y, caixa.w - 40, 52)
@@ -1018,6 +1282,8 @@ class Jogo:
                    (caixa.x + 26, caixa.bottom - 34), self.f_peq, (170, 200, 230))
 
     def capacidade(self):
+        if self.mochila_infinita:
+            return 999999
         return MOCHILAS[self.nivel_mochila][1] + MOCHILA_EXTRA * self.reforco_mochila
 
     def espaco_usado(self):
@@ -1185,16 +1451,20 @@ class Jogo:
         if self.click and self.cliques_hud():
             self.click = False
             return
+        if pygame.K_k in tc:
+            self.estado = "loja"
+            self.som("clique", 0.4)
+            return
         for i, key in enumerate((pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5, pygame.K_6,
-                                 pygame.K_7, pygame.K_8, pygame.K_9)):
+                                 pygame.K_7, pygame.K_8, pygame.K_9, pygame.K_0)):
             if key in tc:
                 if self.modo_construir is not None:
                     if i < len(RECEITAS):
                         self.modo_construir = i
-                elif i < len(ARMAS) and ARMAS[i]["id"] in self.armas:
-                    self.trocar_arma(ARMAS[i]["id"])
-                elif i < len(ARMAS):
-                    self.msg(f"Você ainda não tem: {ARMAS[i]['nome']}", (200, 190, 180))
+                elif i < len(self.armas):
+                    self.trocar_arma(self.armas[i])
+                else:
+                    self.msg(f"Você tem {len(self.armas)} armas. Tecla {(i + 1) % 10} está vazia.", (200, 190, 180))
         if self.roda and self.modo_construir is None:
             i = self.armas.index(self.arma)
             self.trocar_arma(self.armas[(i - self.roda) % len(self.armas)])
@@ -1516,6 +1786,29 @@ class Jogo:
         if len(self.decalques) > 320:
             self.decalques.pop(0)
 
+    def explodir(self, x, y, dano):
+        """Explosao do foguete da RPG: machuca todo zumbi perto (e voce, se estiver perto demais)."""
+        p = self.p
+        for z in list(self.zumbis):
+            d = math.hypot(z.x - x, z.y - y)
+            if d < 150:
+                self.ferir_zumbi(z, dano * (1 - d / 190), math.atan2(z.y - y, z.x - x))
+        dp = math.hypot(p.x - x, p.y - y)
+        if dp < 90:
+            p.vida -= 30 * (1 - dp / 90)
+            self.dano_t = 0.45
+        for _ in range(40):
+            a = random.uniform(0, 6.283)
+            v = random.uniform(60, 320)
+            cor = random.choice([(255, 200, 60), (255, 120, 30), (240, 60, 20), (90, 80, 70)])
+            self.particula(x, y, math.cos(a) * v, math.sin(a) * v, random.uniform(0.3, 0.8), cor, random.randint(3, 7), "f")
+        self.decalque(random.choice(self.spr_sangue), x - 20, y - 20)
+        self.flash_t = 0.12
+        self.flash_pos = (x, y)
+        self.tremor = max(self.tremor, 16)
+        self.fazer_barulho(x, y, 2000)
+        self.som("espingarda", 1.0)
+
     def ferir_zumbi(self, z, dano, ang):
         z.hp -= dano
         if len(self.numeros) < 40:
@@ -1612,6 +1905,12 @@ class Jogo:
                         alvos.append((tt, z))
             alvos.sort(key=lambda q: q[0])
             fim_vis = fim
+            if a.get("explode"):
+                t_imp = alvos[0][0] if alvos else fim
+                ix, iy = ox + dx * t_imp, oy + dy * t_imp
+                self.rastros.append([ox, oy, ix, iy, 0.12])
+                self.explodir(ix, iy, a["dano"])
+                continue
             for k, (tt, z) in enumerate(alvos[:a["fura"] + 1]):
                 queda = 1.0 - 0.6 * (tt / a["alcance"]) if a["id"] == "espingarda" else 1.0
                 self.ferir_zumbi(z, a["dano"] * queda * random.uniform(0.9, 1.1), ang)
@@ -2243,12 +2542,14 @@ class Jogo:
 
     def vencer(self):
         self.estado = "vitoria"
+        self.moedas += MOEDAS_ZERAR
+        self.recorde["moedas"] = self.moedas
         self.recorde["resgates"] = self.recorde.get("resgates", 0) + 1
         self.recorde["dias"] = max(self.recorde.get("dias", 0), self.dia)
         self.recorde["zumbis"] = max(self.recorde.get("zumbis", 0), self.mortes)
         self.gravar_recorde()
         try:
-            os.remove(SAVE_FILE)
+            os.remove(self.caminho_save())
         except Exception:
             pass
 
@@ -2258,6 +2559,8 @@ class Jogo:
         self.texto(f"Sobreviveu {self.dia} dias e derrubou {self.mortes} zumbis.", (W // 2, 280), self.f_med2, centro=True)
         self.texto("O helicóptero levou você para a zona segura. Parabéns, sobrevivente.", (W // 2, 320), self.f_med2,
                    centro=True)
+        self.texto(f"+{MOEDAS_ZERAR} MOEDAS por zerar o jogo!  (agora você tem {self.moedas})", (W // 2, 366),
+                   self.f_med, (255, 220, 110), centro=True)
         if self.botao("Menu", W // 2, 420):
             self.mundo = None
             self.estado = "menu"
@@ -2831,14 +3134,14 @@ class Jogo:
             if extras:
                 self.texto(" + ".join(extras), (W - 120, H - 92), self.f_peq, (150, 210, 255))
         x = W - 320
-        for i, aa in enumerate(ARMAS):
-            r = pygame.Rect(x + 4 + i * 34, H - 50, 31, 30)
+        for i, aa in enumerate([ARMAS[ARMA_IDX[k]] for k in self.armas[:10]]):
+            r = pygame.Rect(x + 4 + i * 31, H - 50, 28, 30)
             tem = aa["id"] in self.armas
             pygame.draw.rect(tela, (60, 50, 30) if aa["id"] == self.arma else (30, 32, 36), r, border_radius=6)
             pygame.draw.rect(tela, (230, 190, 90) if aa["id"] == self.arma else (70, 70, 76), r, 1, border_radius=6)
             if tem:
                 G.desenha_icone(tela, aa["id"], r.centerx, r.centery + 1, 0.7)
-            self.texto(str(i + 1), (r.x + 3, r.y - 2), self.f_peq, (200, 200, 200) if tem else (90, 90, 90), sombra=False)
+            self.texto(str((i + 1) % 10), (r.x + 3, r.y - 2), self.f_peq, (200, 200, 200) if tem else (90, 90, 90), sombra=False)
         # itens rapidos
         itens = [("comida", "F"), ("agua", "G"), ("bandagem", "H"), ("kit", "J"), ("tabua", ""), ("sucata", ""),
                  ("ferramentas", ""), ("peca", "")]
@@ -2865,6 +3168,23 @@ class Jogo:
         G.desenha_icone(tela, f"mochila{self.nivel_mochila}" if self.nivel_mochila else "mochila", rb.centerx, rb.centery - 2,
                         1.5)
         self.texto("V", (rb.x + 5, rb.y + 1), self.f_peq, (200, 200, 200), sombra=False)
+        mouse = pygame.mouse.get_pos()
+        rl = pygame.Rect(rb.right + 166, H - 136, 60, 58)
+        self.rect_botao_loja = rl
+        self.painel(rl, 220 if rl.collidepoint(mouse) else 170)
+        pygame.draw.rect(tela, (230, 190, 90) if rl.collidepoint(mouse) else (150, 120, 60), rl, 2, border_radius=12)
+        pygame.draw.circle(tela, (120, 90, 20), (rl.centerx, rl.y + 22), 11)
+        pygame.draw.circle(tela, (240, 200, 70), (rl.centerx, rl.y + 22), 9)
+        self.texto("LOJA", (rl.centerx, rl.y + 45), self.f_peq, (255, 220, 120), centro=True)
+        self.texto("K", (rl.x + 5, rl.y + 1), self.f_peq, (200, 200, 200), sombra=False)
+        self.rect_botao_dono = None
+        if self.dono:
+            rd = pygame.Rect(rl.right + 8, H - 136, 60, 58)
+            self.rect_botao_dono = rd
+            self.painel(rd, 220 if rd.collidepoint(mouse) else 170)
+            pygame.draw.rect(tela, (255, 120, 220) if rd.collidepoint(mouse) else (170, 80, 150), rd, 2, border_radius=12)
+            G.desenha_icone(tela, "mochila4", rd.centerx, rd.y + 22, 1.0)
+            self.texto("DONO", (rd.centerx, rd.y + 45), self.f_peq, (255, 160, 230), centro=True)
         fr = min(1, uso / cap)
         pygame.draw.rect(tela, (30, 30, 34), (rb.right + 8, H - 98, 150, 8), border_radius=4)
         pygame.draw.rect(tela, (230, 90, 70) if fr > 0.95 else (200, 180, 120), (rb.right + 8, H - 98, int(150 * fr), 8),
@@ -2898,6 +3218,11 @@ class Jogo:
         clima = "  ·  chuva" if self.chuva else ""
         self.texto(f"Dia {self.dia}  ·  {h:02d}:{mi:02d}  ·  {ESTACOES[self.estacao()][0]}{clima}", (64, 22), self.f_med)
         self.texto(f"zumbis: {self.mortes}", (380, 24), self.f_peq, (200, 170, 160))
+        self.painel(pygame.Rect(W - 207, 238, 194, 34))
+        pygame.draw.circle(tela, (120, 90, 20), (W - 186, 255), 10)
+        pygame.draw.circle(tela, (240, 200, 70), (W - 186, 255), 8)
+        self.texto("DONO" if self.dono else f"{self.moedas}", (W - 168, 243), self.f_med, (255, 220, 110))
+        self.texto("moedas", (W - 90, 246), self.f_peq, (220, 200, 150))
         self.texto(self.objetivo(), (26, 56), self.f_peq, (255, 225, 150))
         # mensagens
         y = H - 170
