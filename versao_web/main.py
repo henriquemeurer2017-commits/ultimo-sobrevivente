@@ -13,6 +13,10 @@ import os
 import sys
 import time
 
+import numpy  # noqa: F401  (o pygbag so carrega o que aparece aqui)
+import pygame  # noqa: F401
+import pygame.mixer  # noqa: F401
+
 import config
 import jogo
 
