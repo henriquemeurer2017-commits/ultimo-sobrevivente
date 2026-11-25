@@ -401,21 +401,27 @@ class Mundo:
         malas = [mv for mv in self.moveis if mv["tipo"] == "porta_malas"]
         rnd.shuffle(casa)
         rnd.shuffle(malas)
-        k = 0
-        for item, n in (("mochila1", 70), ("mochila2", 35), ("mochila3", 8)):
-            for mv in casa[k:k + n]:
-                mv["itens"].append([item, 1])
-            k += n
-        for mv in malas[:20]:
-            mv["itens"].append(["mochila2", 1])
-        for mv in casa[k:k + 30]:
-            mv["itens"].append(["ferramentas", 1])
-        for mv in malas[20:]:
+        # cada armario/gaveta sorteia: mochila (quase metade tem), ferramentas e saco de dormir
+        for mv in casa:
+            r = rnd.random()
+            if r < 0.22:
+                mv["itens"].append(["mochila1", 1])
+            elif r < 0.38:
+                mv["itens"].append(["mochila2", 1])
+            elif r < 0.45:
+                mv["itens"].append(["mochila3", 1])
+            elif r < 0.47:
+                mv["itens"].append(["mochila4", 1])
+            if rnd.random() < 0.12:
+                mv["itens"].append(["ferramentas", 1])
+            if rnd.random() < 0.10:
+                mv["itens"].append(["saco", 1])
+        for mv in malas[:45]:
+            mv["itens"].append(["mochila2" if rnd.random() < 0.75 else "mochila3", 1])
+        for mv in malas[45:]:
             if rnd.random() < 0.4:
                 mv["itens"].append(["sucata", rnd.randint(2, 4)])
-        # sacos de dormir em algumas casas, seringas rarissimas nos hospitais
-        for mv in casa[k + 30:k + 55]:
-            mv["itens"].append(["saco", 1])
+        # seringas rarissimas nos hospitais
         medicos = [mv for mv in self.moveis if mv["tipo"] == "medico" and (mv.get("predio") or {}).get("tipo") != "militar"]
         rnd.shuffle(medicos)
         for mv in medicos[:3]:
@@ -484,11 +490,13 @@ class Mundo:
                     solta("tabua", rnd.randint(3, 6), c["x"], c["y"], c["raio"] * 1.3)
                 else:
                     solta("sucata", rnd.randint(2, 5), c["x"], c["y"], c["raio"] * 1.3)
-            solta("mochila1", 1, c["x"], c["y"], c["raio"] * 1.2)
+            for _ in range(3 if c["tipo"] == "cidade" else 1):
+                solta(rnd.choice(["mochila1", "mochila2", "mochila2", "mochila3"]), 1, c["x"], c["y"], c["raio"] * 1.2)
         # uma mochila escolar perto de onde voce comeca
         solta("mochila1", 1, self.inicio[0] / T, self.inicio[1] / T, 4)
-        for _ in range(25):
-            solta(rnd.choice(["mochila1", "mochila1", "mochila2"]), 1, rnd.uniform(20, N - 20), rnd.uniform(20, N - 20), 3)
+        for _ in range(70):
+            solta(rnd.choice(["mochila1", "mochila2", "mochila2", "mochila3"]), 1, rnd.uniform(20, N - 20),
+                  rnd.uniform(20, N - 20), 3)
 
     def _aumentar_bunker(self, b, rnd):
         """Bunker grande: cresce 2 quadradinhos para cada lado, com mais caixas e camas."""

@@ -113,9 +113,9 @@ ESTACOES = [("Verão", (1.04, 1.02, 0.92), (8, 6, 0), 1.0, 1.35),
             ("Primavera", (0.95, 1.06, 0.95), (0, 6, 0), 1.0, 1.0)]
 DIAS_ESTACAO = 6
 # (nome, espaco, cor) por nivel; nivel 0 = so os bolsos
-MOCHILAS = [("Bolsos", 30, (90, 90, 90)), ("Mochila escolar", 55, (60, 110, 190)),
-            ("Mochila de trilha", 85, (200, 120, 40)), ("Mochila militar", 125, (80, 110, 60)),
-            ("Mochila tática grande", 180, (40, 44, 40))]
+MOCHILAS = [("Bolsos", 30, (90, 90, 90)), ("Mochila escolar", 80, (60, 110, 190)),
+            ("Mochila de trilha", 150, (200, 120, 40)), ("Mochila militar", 250, (80, 110, 60)),
+            ("Mochila tática grande", 390, (40, 44, 40))]
 
 RECEITAS = [
     dict(id="barricada", nome="Barricada", custo={"tabua": 4}),
