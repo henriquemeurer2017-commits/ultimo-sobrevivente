@@ -321,7 +321,22 @@ def sangue(rnd, r):
 
 
 # ------------------------------------------------------------------ itens
+_CACHE_ICONE = {}
+
+
 def desenha_icone(s, item, x, y, k=1.0):
+    """Desenha o icone do item. Guarda o desenho pronto para reaproveitar."""
+    chave = (item, round(k, 2))
+    img = _CACHE_ICONE.get(chave)
+    if img is None:
+        tam = int(64 * k) + 8
+        img = pygame.Surface((tam, tam), pygame.SRCALPHA)
+        _desenha_icone_bruto(img, item, tam // 2, tam // 2, k)
+        _CACHE_ICONE[chave] = img
+    s.blit(img, (int(x) - img.get_width() // 2, int(y) - img.get_height() // 2))
+
+
+def _desenha_icone_bruto(s, item, x, y, k=1.0):
     x = int(x)
     y = int(y)
 
@@ -368,6 +383,16 @@ def desenha_icone(s, item, x, y, k=1.0):
         for i in range(3):
             pygame.draw.rect(s, (220, 190, 80), R(-6 + i * 5, -4, 3, 3))
         pygame.draw.rect(s, (30, 30, 30), R(-5, 2, 10, 2))
+    elif item == "seringa":
+        pygame.draw.line(s, (200, 200, 210), (x - 11 * k, y + 8 * k), (x + 6 * k, y - 9 * k), max(1, int(6 * k)))
+        pygame.draw.line(s, (240, 60, 70), (x - 8 * k, y + 5 * k), (x + 3 * k, y - 6 * k), max(1, int(3 * k)))
+        pygame.draw.line(s, (150, 150, 160), (x + 6 * k, y - 9 * k), (x + 11 * k, y - 14 * k), max(1, int(1.5 * k)))
+        pygame.draw.line(s, (90, 90, 100), (x - 14 * k, y + 5 * k), (x - 8 * k, y + 11 * k), max(1, int(3 * k)))
+    elif item == "saco":
+        pygame.draw.rect(s, (40, 70, 120), R(-12, -6, 24, 12), border_radius=6)
+        pygame.draw.rect(s, (70, 110, 170), R(-12, -6, 9, 12), border_radius=5)
+        for i in (-2, 3, 8):
+            pygame.draw.line(s, (30, 50, 90), (x + i * k, y - 6 * k), (x + i * k, y + 6 * k), 1)
     elif item == "mochila":
         pygame.draw.rect(s, (90, 70, 44), R(-8, -9, 16, 18), border_radius=4)
         pygame.draw.rect(s, (120, 94, 60), R(-6, -2, 12, 8), border_radius=2)

@@ -48,6 +48,8 @@ ITENS = {
     "sucata": "Sucata de metal",
     "ferramentas": "Ferramentas",
     "peca": "Peça do rádio",
+    "seringa": "Seringa de adrenalina",
+    "saco": "Saco de dormir",
     "mochila1": "Mochila escolar",
     "mochila2": "Mochila de trilha",
     "mochila3": "Mochila militar",
@@ -103,7 +105,13 @@ NOMES_MOVEIS = {
 
 # espaco que cada unidade ocupa na mochila
 ESPACO = {"comida": 1, "agua": 1, "bandagem": 0.5, "kit": 1.5, "9mm": 0.04, "12": 0.08, "556": 0.04, "308": 0.08,
-          "tabua": 1, "sucata": 1, "ferramentas": 2}
+          "tabua": 1, "sucata": 1, "ferramentas": 2, "seringa": 0.5, "saco": 4}
+# estacoes do ano: cada uma dura 6 dias. (nome, multiplica cor, soma cor, fome x, sede x)
+ESTACOES = [("Verão", (1.04, 1.02, 0.92), (8, 6, 0), 1.0, 1.35),
+            ("Outono", (1.12, 0.92, 0.70), (14, 4, 0), 1.0, 1.0),
+            ("Inverno", (0.80, 0.86, 0.92), (70, 74, 82), 1.35, 0.8),
+            ("Primavera", (0.95, 1.06, 0.95), (0, 6, 0), 1.0, 1.0)]
+DIAS_ESTACAO = 6
 # (nome, espaco, cor) por nivel; nivel 0 = so os bolsos
 MOCHILAS = [("Bolsos", 30, (90, 90, 90)), ("Mochila escolar", 55, (60, 110, 190)),
             ("Mochila de trilha", 85, (200, 120, 40)), ("Mochila militar", 125, (80, 110, 60)),

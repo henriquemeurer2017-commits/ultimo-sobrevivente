@@ -270,10 +270,19 @@ class Jogo:
 
     def texto(self, txt, pos, fonte=None, cor=(235, 230, 220), centro=False, sombra=True):
         fonte = fonte or self.f_med2
-        img = fonte.render(txt, True, cor)
+        # textos prontos ficam guardados: escrever letra por letra todo quadro pesa
+        cache = self.__dict__.setdefault("cache_texto", {})
+        k = (txt, id(fonte), cor, sombra)
+        par = cache.get(k)
+        if par is None:
+            img = fonte.render(txt, True, cor)
+            sh = fonte.render(txt, True, (0, 0, 0)) if sombra else None
+            if len(cache) > 800:
+                cache.clear()
+            par = cache[k] = (img, sh)
+        img, sh = par
         r = img.get_rect(center=pos) if centro else img.get_rect(topleft=pos)
-        if sombra:
-            sh = fonte.render(txt, True, (0, 0, 0))
+        if sh is not None:
             self.tela.blit(sh, r.move(2, 2))
         self.tela.blit(img, r)
         return r
@@ -337,14 +346,14 @@ class Jogo:
             "B: construir   ·   L: lanterna   ·   M: mapa   ·   V: abrir a MOCHILA (clique para comer, beber, curar e construir)",
             "",
             "Fique de olho nas barras de VIDA, FOME e SEDE. Se a fome ou a sede zerarem, você perde vida.",
-            "Hospitais e postos de saúde têm camas para se curar. Bunkers servem para dormir e salvar o jogo.",
+            "Hospital cura. Bunker e SACO DE DORMIR servem para dormir e salvar. A SERINGA (rara, nos bunkers) cura tudo.",
             "Armas e munição ficam no chão, nas casas, nos carros e nos bunkers. O silenciador deixa o tiro baixinho.",
             "Zumbi só te persegue se te VER (de frente, sem nada no meio). O \"?\" mostra que ele desconfiou.",
             "Barulho atrai zumbis. Nos campos de capim alto (amarelos no mapa) eles quase não te enxergam.",
             "Tem regiões calmas sem nenhum zumbi. Cidades e algumas matas são infestadas. A noite é bem escura.",
             "",
             "OBJETIVO: achar as 5 peças do rádio nos bunkers militares e chamar o resgate na torre de rádio.",
-            "Cada bunker tem um bilhete que mostra onde está o próximo. O jogo salva sozinho.",
+            "Cada bunker tem um bilhete que mostra onde está o próximo. As estações mudam a cada 6 dias. O jogo salva sozinho.",
         ]
         y = 118
         for l in linhas:
@@ -383,6 +392,8 @@ class Jogo:
         self.acao = None
         self.t_spawn = 0.0
         self.na_calma = False
+        self.adrenalina = 0.0
+        self.estacao_atual = None
         self.nivel_mochila = 0
         self.t_cheia = 0.0
         self.t_explo = 0.0
@@ -461,6 +472,18 @@ class Jogo:
         m = self.mundo
         self.p = Jogador(d["x"], d["y"])
         self.p.vida, self.p.fome, self.p.sede = d["vida"], d["fome"], d["sede"]
+        if m.bloqueado(self.p.x, self.p.y, self.p.r):  # o mundo mudou e voce ficou preso: procura um lugar livre
+            for raio in range(16, 800, 16):
+                livre = None
+                for k in range(24):
+                    ax = self.p.x + math.cos(k / 24 * 6.283) * raio
+                    ay = self.p.y + math.sin(k / 24 * 6.283) * raio
+                    if not m.bloqueado(ax, ay, self.p.r):
+                        livre = (ax, ay)
+                        break
+                if livre:
+                    self.p.x, self.p.y = livre
+                    break
         self.inv = d["inv"]
         self.nivel_mochila = d.get("nivel_mochila", 0)
         self.p.sangrando, self.p.perna, self.p.braco = d.get("feridas", [False, False, False])
@@ -753,7 +776,8 @@ class Jogo:
             self.texto(f"Ache uma {MOCHILAS[self.nivel_mochila + 1][0]} para carregar mais.", (450, 112), self.f_peq,
                        (180, 175, 165))
         # itens
-        acoes = {"comida": "Comer", "agua": "Beber", "bandagem": "Curar", "kit": "Curar"}
+        acoes = {"comida": "Comer", "agua": "Beber", "bandagem": "Curar", "kit": "Curar", "seringa": "Injetar",
+                 "saco": "Dormir"}
         lista = [k for k in ITENS if k in ESPACO or k == "peca"]
         lista = [k for k in lista if self.inv.get(k, 0) > 0]
         x0, y0 = 450, 146
@@ -811,6 +835,21 @@ class Jogo:
         if self.botao_peq("Fechar (V)", pygame.Rect(1130, 40, 104, 36)):
             self.estado = "jogo"
 
+    def estacao(self):
+        return ((self.dia - 1) // DIAS_ESTACAO) % len(ESTACOES)
+
+    def tingir(self, s, copa=False):
+        """Pinta o chao (ou as copas) com a cor da estacao. So mexe nas cores, nunca na transparencia."""
+        if s is None:
+            return s
+        _, mult, soma, _, _ = ESTACOES[self.estacao()]
+        if mult == (1, 1, 1) and not any(soma):
+            return s
+        arr = pygame.surfarray.pixels3d(s)
+        arr[:] = np.clip(arr * np.array(mult, np.float32) + np.array(soma, np.float32), 0, 255).astype(np.uint8)
+        del arr
+        return s
+
     def capacidade(self):
         return MOCHILAS[self.nivel_mochila][1]
 
@@ -822,7 +861,7 @@ class Jogo:
         k = (cx, cy)
         s = self.cache_chao.get(k)
         if s is None:
-            s = self.mundo.assar_chao(cx, cy)
+            s = self.tingir(self.mundo.assar_chao(cx, cy))
             self.cache_chao[k] = s
             if len(self.cache_chao) > 48:
                 self.cache_chao.popitem(last=False)
@@ -835,9 +874,11 @@ class Jogo:
         if k in self.cache_copa:
             self.cache_copa.move_to_end(k)
             return self.cache_copa[k]
-        s = self.mundo.assar_copa(cx, cy)
+        s = self.tingir(self.mundo.assar_copa(cx, cy), copa=True)
         if s is not None:
-            s.set_alpha(238)
+            # transparencia so por pixel (mais rapido) e compactada (RLE): quase tudo e vazio
+            s.fill((255, 255, 255, 238), special_flags=pygame.BLEND_RGBA_MULT)
+            s.set_alpha(255, pygame.RLEACCEL)
         self.cache_copa[k] = s
         if len(self.cache_copa) > 48:
             self.cache_copa.popitem(last=False)
@@ -1052,6 +1093,22 @@ class Jogo:
                 p.sangrando = False
                 self.msg("O sangramento parou.", (170, 240, 170))
             p.vida = min(100, p.vida + 22)
+        elif item == "seringa":
+            p.curar_tudo()
+            p.vida = 100
+            p.folego = 100
+            self.adrenalina = 60.0
+            self.msg("ADRENALINA! Vida cheia, machucados curados e você corre mais por 1 minuto.", (255, 120, 140))
+        elif item == "saco":
+            if self.zumbi_perto(500):
+                self.msg("Não dá para dormir com zumbi atrás de você!", (255, 150, 120))
+                return
+            if self.mundo.tile_px(p.x, p.y) in (AGUA, PONTE):
+                self.msg("Não dá para dormir em cima da água.", (255, 150, 120))
+                return
+            self.msg("Você abriu o saco de dormir e deitou...", (180, 220, 255))
+            self.dormir(None)
+            return
         elif item == "kit":
             if p.vida >= 100 and not (p.sangrando or p.perna or p.braco):
                 self.msg("Sua vida está cheia.")
@@ -1406,6 +1463,10 @@ class Jogo:
         elif corre and movendo and p.folego > 1:
             vel = 212
             correndo = True
+        if self.adrenalina > 0:
+            self.adrenalina -= dt
+            vel *= 1.35
+            p.folego = 100
         if p.perna:
             vel = min(vel, 128) * 0.62
             correndo = False
@@ -1427,8 +1488,17 @@ class Jogo:
         else:
             p.folego = min(100, p.folego + (14 if not movendo else 8) * dt)
         # fome e sede
-        p.fome = max(0, p.fome - 100 / FOME_SEG * dt)
-        p.sede = max(0, p.sede - 100 / SEDE_SEG * dt * (1.6 if correndo else 1.0))
+        est = ESTACOES[self.estacao()]
+        p.fome = max(0, p.fome - 100 / FOME_SEG * dt * est[3])
+        p.sede = max(0, p.sede - 100 / SEDE_SEG * dt * (1.6 if correndo else 1.0) * est[4])
+        if self.estacao() != self.estacao_atual:
+            if self.estacao_atual is not None:
+                dica = {"Verão": " Calor: você tem mais sede.", "Inverno": " Frio: você tem mais fome.",
+                        "Outono": "", "Primavera": ""}[est[0]]
+                self.msg(f"Chegou o {est[0].upper()}!{dica}", (255, 230, 160))
+            self.estacao_atual = self.estacao()
+            self.cache_chao.clear()
+            self.cache_copa.clear()
         if p.sangrando:
             p.vida -= 0.45 * dt
             if random.random() < dt * 2:
@@ -2112,6 +2182,13 @@ class Jogo:
             for _ in range(r.randint(4, 14)):
                 pygame.draw.circle(s, r.choice([(70, 90, 50), (90, 100, 60), (60, 56, 50)]),
                                    (r.randint(0, w), r.randint(0, h)), r.randint(2, 6))
+            rm = random.Random(b["id"] * 97 + 3)
+            if rm.random() < 0.45:  # casa velha com musgo
+                for _ in range(rm.randint(5, 12)):
+                    mx, my = rm.randint(0, w), rm.randint(0, h)
+                    for _ in range(rm.randint(3, 7)):
+                        pygame.draw.circle(s, rm.choice([(64, 96, 44), (78, 112, 52), (52, 80, 38)]),
+                                           (mx + rm.randint(-12, 12), my + rm.randint(-8, 8)), rm.randint(4, 10))
             cx = r.randint(20, w - 30)
             cy = r.randint(8, h - 30)
             pygame.draw.rect(s, (80, 70, 66), (cx, cy, 16, 16))
@@ -2292,7 +2369,7 @@ class Jogo:
                     self.alfa_telhado[b["id"]] = a
                     if a > 0:
                         s = self.telhado(b)
-                        s.set_alpha(a)
+                        s.set_alpha(None if a >= 255 else a)
                         tela.blit(s, (b["x"] * T - camx, b["y"] * T - camy))
         if m.torre and vis.colliderect(pygame.Rect(m.torre["x"] * T, m.torre["y"] * T, 9 * T, 9 * T)):
             tela.blit(self.spr_torre, ((m.torre["x"] + 4.5) * T - camx - 75, (m.torre["y"] + 4.5) * T - camy - 75))
@@ -2429,9 +2506,16 @@ class Jogo:
 
     # ---------------------------------------------------------------- HUD
     def painel(self, rect, alpha=170):
-        s = pygame.Surface(rect.size, pygame.SRCALPHA)
-        pygame.draw.rect(s, (12, 14, 18, alpha), s.get_rect(), border_radius=12)
-        pygame.draw.rect(s, (255, 255, 255, 30), s.get_rect(), 1, border_radius=12)
+        k = (rect.w, rect.h, alpha)
+        cache = self.__dict__.setdefault("cache_painel", {})
+        s = cache.get(k)
+        if s is None:
+            s = pygame.Surface(rect.size, pygame.SRCALPHA)
+            pygame.draw.rect(s, (12, 14, 18, alpha), s.get_rect(), border_radius=12)
+            pygame.draw.rect(s, (255, 255, 255, 30), s.get_rect(), 1, border_radius=12)
+            if len(cache) > 60:
+                cache.clear()
+            cache[k] = s
         self.tela.blit(s, rect.topleft)
 
     def barra(self, x, y, valor, cor, icone, nome):
@@ -2549,7 +2633,7 @@ class Jogo:
         h = int(self.hora)
         mi = int((self.hora - h) * 60) // 10 * 10
         clima = "  ·  chuva" if self.chuva else ""
-        self.texto(f"Dia {self.dia}  ·  {h:02d}:{mi:02d}{clima}", (64, 22), self.f_med)
+        self.texto(f"Dia {self.dia}  ·  {h:02d}:{mi:02d}  ·  {ESTACOES[self.estacao()][0]}{clima}", (64, 22), self.f_med)
         self.texto(f"zumbis: {self.mortes}", (380, 24), self.f_peq, (200, 170, 160))
         self.texto(self.objetivo(), (26, 56), self.f_peq, (255, 225, 150))
         # mensagens

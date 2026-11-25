@@ -413,6 +413,13 @@ class Mundo:
         for mv in malas[20:]:
             if rnd.random() < 0.4:
                 mv["itens"].append(["sucata", rnd.randint(2, 4)])
+        # sacos de dormir em algumas casas, seringas rarissimas nos hospitais
+        for mv in casa[k + 30:k + 55]:
+            mv["itens"].append(["saco", 1])
+        medicos = [mv for mv in self.moveis if mv["tipo"] == "medico" and (mv.get("predio") or {}).get("tipo") != "militar"]
+        rnd.shuffle(medicos)
+        for mv in medicos[:3]:
+            mv["itens"].append(["seringa", 1])
         for b in self.bunkers:
             caixas = [mv for mv in self.moveis if mv.get("predio") is b and mv["tipo"] == "militar"]
             if caixas:
@@ -420,6 +427,9 @@ class Mundo:
             # despensa (muita comida e agua) e arsenal (armas melhores) dentro de cada bunker
             i = b["indice"]
             x, y, w, h = b["x"], b["y"], b["w"], b["h"]
+            # tamanho: o primeiro fica normal; os outros podem ser grandes (mais coisas) ou pequenos (menos)
+            r = rnd.random()
+            b["porte"] = "normal" if i == 0 else ("grande" if r < 0.45 else ("pequeno" if r < 0.75 else "normal"))
             # segunda porta, do lado oposto, para achar a entrada mais facil
             pts = b.get("portas", [])
             if pts:
@@ -435,16 +445,26 @@ class Mundo:
                     self.t[py * N + px] = PORTA
                     self.tn[py, px] = PORTA
                 b["portas"] = list(pts) + novas
+            porte = b["porte"]
+            q = {"pequeno": (3, 5), "normal": (8, 12), "grande": (14, 20)}[porte]
             self.moveis.append(dict(
                 id=len(self.moveis), x=(x + 6) * T + 30, y=(y + 1) * T + 18, tipo="despensa", aberto=False, predio=b,
-                itens=[["comida", rnd.randint(8, 12)], ["agua", rnd.randint(8, 12)], ["bandagem", 4], ["kit", 2]]))
-            arsenal = [["fuzil" if i >= 1 else "espingarda", 1], ["556", 90], ["12", 18], ["silenciador", 1]]
-            if i >= 2:
-                arsenal += [["rifle", 1], ["308", 25]]
+                itens=[["comida", rnd.randint(*q)], ["agua", rnd.randint(*q)], ["bandagem", 4 if porte != "pequeno" else 1],
+                       ["kit", {"pequeno": 1, "normal": 2, "grande": 4}[porte]]]))
+            if porte == "pequeno":
+                arsenal = [["pistola", 1], ["9mm", 30]]
+            else:
+                arsenal = [["fuzil" if i >= 1 else "espingarda", 1], ["556", 90], ["12", 18], ["silenciador", 1], ["saco", 1]]
+                if i >= 2 or porte == "grande":
+                    arsenal += [["rifle", 1], ["308", 25]]
+            if porte == "grande" or rnd.random() < 0.3:
+                arsenal.append(["seringa", 1])
             arsenal.append(["mochila2" if i == 0 else ("mochila3" if i in (1, 3) else "mochila4"), 1])
             self.moveis.append(dict(
                 id=len(self.moveis), x=(x + 6) * T + 30, y=(y + h - 2) * T + 14, tipo="arsenal", aberto=False, predio=b,
                 itens=arsenal))
+            if porte == "grande":
+                self._aumentar_bunker(b, rnd)
 
         # pilhas de tabuas e sucata nas cidades e vilas, e mochilas pelo chao
         def solta(item, q, cx, cy, raio):
@@ -469,6 +489,51 @@ class Mundo:
         solta("mochila1", 1, self.inicio[0] / T, self.inicio[1] / T, 4)
         for _ in range(25):
             solta(rnd.choice(["mochila1", "mochila1", "mochila2"]), 1, rnd.uniform(20, N - 20), rnd.uniform(20, N - 20), 3)
+
+    def _aumentar_bunker(self, b, rnd):
+        """Bunker grande: cresce 2 quadradinhos para cada lado, com mais caixas e camas."""
+        x, y, w, h = b["x"] - 2, b["y"] - 2, b["w"] + 4, b["h"] + 4
+        if x < 4 or y < 4 or x + w > N - 5 or y + h > N - 5:
+            b["porte"] = "normal"
+            return
+        for o in self.construcoes:
+            if o is b:
+                continue
+            if x - 2 < o["x"] + o["w"] and o["x"] < x + w + 2 and y - 2 < o["y"] + o["h"] and o["y"] < y + h + 2:
+                b["porte"] = "normal"
+                return
+        anel = self.tn[y:y + h, x:x + w].copy()
+        anel[2:-2, 2:-2] = GRAMA
+        if not np.all(np.isin(anel, [GRAMA, MATO, AREIA])):
+            b["porte"] = "normal"
+            return
+        # limpa arvores, pedras e capim do terreno novo
+        for ty in range(y - 1, y + h + 1):
+            for tx in range(x - 1, x + w + 1):
+                i = ty * N + tx
+                for d in (self.arvores, self.pedras, self.arbustos, self.capim_g, self.capim_p):
+                    d.pop(i, None)
+                self.col.pop(i, None)
+        piso, parede = PISO_CONC, PAREDE_CONC
+        for ty in range(y, y + h):
+            for tx in range(x, x + w):
+                borda = tx in (x, x + w - 1) or ty in (y, y + h - 1)
+                v = parede if borda else piso
+                self.t[ty * N + tx] = v
+                self.tn[ty, tx] = v
+        portas = [(x + w // 2 - 1, y), (x + w // 2, y), (x + w // 2 - 1, y + h - 1), (x + w // 2, y + h - 1)]
+        for px, py in portas:
+            self.t[py * N + px] = PORTA
+            self.tn[py, px] = PORTA
+        self.ocup[y - 1:y + h + 1, x - 1:x + w + 1] = True
+        self.res[y - 2:y + h + 2, x - 2:x + w + 2] = True
+        b.update(x=x, y=y, w=w, h=h, portas=portas)
+        # mais caixas militares e camas no espaco novo
+        for bx, by in ((x + 1, y + h // 2), (x + w - 2, y + h // 2), (x + 2, y + h - 2)):
+            self.moveis.append(dict(id=len(self.moveis), x=bx * T + 16, y=by * T + 16, tipo="militar", aberto=False,
+                                    predio=b, itens=sortear(rnd, LOOT["militar"], rnd.randint(3, 5))))
+        for bx in (x + w - 4, x + w - 2):
+            self.camas.append(dict(x=bx * T + 16, y=(y + 1) * T + 28, hospital=False, bunker=b["id"]))
 
     def densidade(self, x, y):
         tx = min(N - 1, max(0, int(x // T)))
