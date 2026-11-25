@@ -8,6 +8,33 @@ import pygame
 from config import W, H
 
 
+def vivo(s, sat=1.3, contraste=1.08, brilho=3):
+    """Cores mais vivas e fortes (ideia do Rua dos Zumbis). So mexe nas cores, nunca na transparencia."""
+    if s is None:
+        return s
+    arr = pygame.surfarray.pixels3d(s)
+    f = arr.astype(np.float32)
+    cinza = f.mean(axis=2, keepdims=True)
+    f = cinza + (f - cinza) * sat
+    f = (f - 128.0) * contraste + 128.0 + brilho
+    arr[:] = np.clip(f, 0, 255).astype(np.uint8)
+    del arr
+    return s
+
+
+def contorno(s, cor=(16, 12, 10), esp=2):
+    """Contorno escuro em volta do desenho, para o personagem aparecer bem."""
+    mask = pygame.mask.from_surface(s, 60)
+    sil = mask.to_surface(setcolor=cor + (255,), unsetcolor=(0, 0, 0, 0))
+    out = pygame.Surface(s.get_size(), pygame.SRCALPHA)
+    for dx in range(-esp, esp + 1):
+        for dy in range(-esp, esp + 1):
+            if dx * dx + dy * dy <= esp * esp and (dx or dy):
+                out.blit(sil, (dx, dy))
+    out.blit(s, (0, 0))
+    return out
+
+
 def clamp(v, a, b):
     return a if v < a else b if v > b else v
 
@@ -283,9 +310,9 @@ def _boneco(corpo, pele, cabelo, arma=None, zumbi=False, rnd=None, ombro=13):
     pygame.draw.circle(s, cabelo, (hx - 2, c), 6)
     pygame.draw.circle(s, pele, (hx + 2, c), 4)
     if zumbi:
-        pygame.draw.circle(s, (150, 30, 30), (hx + 5, c - 2), 1)
-        pygame.draw.circle(s, (150, 30, 30), (hx + 5, c + 2), 1)
-    return s
+        pygame.draw.circle(s, (220, 40, 30), (hx + 5, c - 2), 2)
+        pygame.draw.circle(s, (220, 40, 30), (hx + 5, c + 2), 2)
+    return contorno(vivo(s, 1.35, 1.06))
 
 
 def sprite_jogador(arma):
@@ -300,6 +327,9 @@ def sprite_zumbi(rnd, tipo):
     roupa = rnd.choice(ROUPAS_ZUMBI)
     pele = (rnd.randint(118, 140), rnd.randint(138, 156), rnd.randint(104, 120))
     cabelo = rnd.choice([(40, 36, 30), (70, 60, 44), (120, 110, 90), (30, 30, 30), (110, 70, 40)])
+    if tipo == "gigante":
+        base = _boneco((90, 40, 36), (120, 136, 100), (30, 30, 30), zumbi=True, rnd=rnd, ombro=17)
+        return pygame.transform.smoothscale(base, (122, 122))
     if tipo == "gordo":
         return _boneco(tom(roupa, 10), pele, cabelo, zumbi=True, rnd=rnd, ombro=17)
     if tipo == "corredor":

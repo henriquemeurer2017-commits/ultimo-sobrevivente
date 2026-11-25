@@ -69,7 +69,12 @@ class Zumbi:
         self.y = y
         self.tipo = tipo
         self.var = var
-        if tipo == "gordo":
+        if tipo == "gigante":
+            self.hp = 1100
+            self.vel = rnd.uniform(48, 56)
+            self.r = 22
+            self.dano = 30
+        elif tipo == "gordo":
             self.hp = 230
             self.vel = rnd.uniform(40, 50)
             self.r = 14
@@ -123,7 +128,8 @@ class Jogo:
         r = random.Random(42)
         self.spr_z = {"normal": [G.sprite_zumbi(r, "normal") for _ in range(16)],
                       "gordo": [G.sprite_zumbi(r, "gordo") for _ in range(6)],
-                      "corredor": [G.sprite_zumbi(r, "corredor") for _ in range(6)]}
+                      "corredor": [G.sprite_zumbi(r, "corredor") for _ in range(6)],
+                      "gigante": [G.sprite_zumbi(r, "gigante") for _ in range(2)]}
         self.spr_morto = {}
         for tipo, lst in self.spr_z.items():
             self.spr_morto[tipo] = []
@@ -135,6 +141,7 @@ class Jogo:
         self.spr_sangue = [G.sangue(r, r.randint(5, 10)) for _ in range(10)]
         self.spr_sombra = G.sombra_suave(15, 12)
         self.spr_sombra_g = G.sombra_suave(19, 15)
+        self.spr_sombra_gg = G.sombra_suave(32, 26)
         self.spr_barricada = G.sprite_barricada()
         self.spr_fogueira = G.sprite_fogueira()
         self.spr_abrigo = G.sprite_abrigo()
@@ -342,7 +349,7 @@ class Jogo:
         self.texto("COMO JOGAR", (W // 2, 60), self.f_grande, centro=True)
         linhas = [
             "W A S D: andar   ·   SHIFT: correr   ·   Mouse: mirar   ·   Botão esquerdo: atacar/atirar",
-            "Botão direito: mirar com calma (tiro mais certeiro)   ·   R: recarregar   ·   1 a 6: trocar de arma",
+            "Botão direito: mirar com calma   ·   R: recarregar   ·   1 a 6: trocar de arma   ·   ESPAÇO: esquiva rápida",
             "E: revistar armários, carros e caixas  ·  beber água no lago  ·  dormir  ·  cortar árvore (com machado)",
             "F: comer   ·   G: beber água   ·   H: bandagem   ·   J: kit médico",
             "B: construir   ·   L: lanterna   ·   M: mapa   ·   V: abrir a MOCHILA (clique para comer, beber, curar e construir)",
@@ -394,6 +401,10 @@ class Jogo:
         self.acao = None
         self.t_spawn = 0.0
         self.na_calma = False
+        self.numeros = []
+        self.esquiva = 0.0
+        self.t_esquiva = 0.0
+        self.dir_esquiva = (1.0, 0.0)
         self.adrenalina = 0.0
         self.estacao_atual = None
         self.nivel_mochila = 0
@@ -863,7 +874,7 @@ class Jogo:
         k = (cx, cy)
         s = self.cache_chao.get(k)
         if s is None:
-            s = self.tingir(self.mundo.assar_chao(cx, cy))
+            s = G.vivo(self.tingir(self.mundo.assar_chao(cx, cy)), 1.25, 1.06)
             self.cache_chao[k] = s
             if len(self.cache_chao) > 48:
                 self.cache_chao.popitem(last=False)
@@ -876,7 +887,7 @@ class Jogo:
         if k in self.cache_copa:
             self.cache_copa.move_to_end(k)
             return self.cache_copa[k]
-        s = self.tingir(self.mundo.assar_copa(cx, cy), copa=True)
+        s = G.vivo(self.tingir(self.mundo.assar_copa(cx, cy), copa=True), 1.3, 1.05)
         if s is not None:
             # transparencia so por pixel (mais rapido) e compactada (RLE): quase tudo e vazio
             s.fill((255, 255, 255, 238), special_flags=pygame.BLEND_RGBA_MULT)
@@ -1335,6 +1346,8 @@ class Jogo:
 
     def ferir_zumbi(self, z, dano, ang):
         z.hp -= dano
+        if len(self.numeros) < 40:
+            self.numeros.append([z.x + random.uniform(-8, 8), z.y - 18, str(int(round(dano))), 0.7, dano >= 60])
         z.flash = 0.08
         z.estado = "perseguir"
         z.alvo = (self.p.x, self.p.y)
@@ -1357,6 +1370,12 @@ class Jogo:
             return
         self.zumbis.remove(z)
         self.mortes += 1
+        if z.tipo == "gigante":
+            self.msg("Você derrubou um GIGANTE! Ele deixou coisas boas no chão.", (255, 220, 120))
+            for item, q in (("kit", 2), ("556", 40), ("seringa" if random.random() < 0.3 else "comida", 1)):
+                self.drop_id += 1
+                self.mundo.add_item_chao(dict(id=self.drop_id, x=z.x + random.uniform(-30, 30),
+                                              y=z.y + random.uniform(-30, 30), item=item, q=q))
         base = self.spr_morto[z.tipo][z.var]
         corpo = pygame.transform.rotate(base, -math.degrees(ang) + random.uniform(-30, 30))
         s = random.choice(self.spr_sangue)
@@ -1457,6 +1476,24 @@ class Jogo:
         wx = mouse[0] + self.cam[0] - W / 2
         wy = mouse[1] + self.cam[1] - H / 2
         p.ang = math.atan2(wy - p.y, wx - p.x)
+        # esquiva rapida (ESPACO)
+        self.t_esquiva -= dt
+        if pygame.K_SPACE in self.teclas and self.t_esquiva <= 0 and p.folego >= 20 and self.esquiva <= 0:
+            if movendo:
+                n = math.hypot(mx, my)
+                self.dir_esquiva = (mx / n, my / n)
+            else:
+                self.dir_esquiva = (math.cos(p.ang), math.sin(p.ang))
+            self.esquiva = 0.2
+            self.t_esquiva = 0.9
+            p.folego -= 20
+            self.som("clique", 0.4)
+        if self.esquiva > 0:
+            self.esquiva -= dt
+            ex, ey = self.dir_esquiva
+            p.x, p.y = self.mover(p.x, p.y, ex * 560 * dt, ey * 560 * dt, p.r)
+            if random.random() < 0.7:
+                self.particula(p.x, p.y + 6, random.uniform(-30, 30), random.uniform(-30, 30), 0.4, (170, 150, 120), 3)
         # andar
         vel = 128.0
         correndo = False
@@ -1551,6 +1588,11 @@ class Jogo:
                 self.som("pegar", 0.5)
         # zumbis
         self.atualizar_zumbis(dt)
+        # numeros de dano subindo
+        for nmr in self.numeros:
+            nmr[1] -= 45 * dt
+            nmr[3] -= dt
+        self.numeros = [nmr for nmr in self.numeros if nmr[3] > 0]
         # efeitos
         for q in self.particulas:
             q[0] += q[2] * dt
@@ -1827,8 +1869,8 @@ class Jogo:
             elif not z.parado:
                 self.passo_zumbi(z, z.ang, z.vel * 0.3 * dt * self.no_arame(z, dt), vagando=True)
             # ataque
-            if d < z.r + p.r + 8 and z.t_ataque <= 0 and not seguro:
-                z.t_ataque = 1.4 if z.tipo == "gordo" else (0.7 if z.tipo == "corredor" else 1.0)
+            if d < z.r + p.r + 8 and z.t_ataque <= 0 and not seguro and self.esquiva <= 0:
+                z.t_ataque = {"gordo": 1.4, "corredor": 0.7, "gigante": 1.7}.get(z.tipo, 1.0)
                 p.vida -= z.dano
                 self.machucar()
                 self.dano_t = 0.45
@@ -1934,7 +1976,10 @@ class Jogo:
             if self.resgate is None and random.random() > m.densidade(x, y):
                 continue
             r = random.random()
-            if r < 0.06 + 0.12 * esc + min(0.1, self.dia * 0.01):
+            tem_gigante = any(z.tipo == "gigante" for z in self.zumbis)
+            if self.resgate is None and esc > 0.5 and self.dia >= 2 and not tem_gigante and random.random() < 0.05:
+                tipo = "gigante"
+            elif r < 0.06 + 0.12 * esc + min(0.1, self.dia * 0.01):
                 tipo = "corredor"
             elif r < 0.25 + 0.05 * esc:
                 tipo = "gordo"
@@ -2234,7 +2279,8 @@ class Jogo:
             txt = self.f_med.render("BUNKER", True, (210, 200, 140))
             s.blit(txt, txt.get_rect(center=(w // 2, h // 2 + 56)))
             pygame.draw.rect(s, (50, 56, 40), (0, 0, w, h), 5)
-        for px, py in b.get("portas", []):
+        G.vivo(s, 1.2, 1.05)
+        for px, py in (b.get("portas", []) if b["tipo"] in ("casa", "militar") else []):
             lx = (px - b["x"]) * T
             ly = (py - b["y"]) * T
             pygame.draw.rect(s, (26, 24, 22), (lx, ly, T, T))
@@ -2317,7 +2363,7 @@ class Jogo:
             if vis.collidepoint(z.x, z.y):
                 sx = z.x - camx
                 sy = z.y - camy
-                sh = self.spr_sombra_g if z.tipo == "gordo" else self.spr_sombra
+                sh = {"gordo": self.spr_sombra_g, "gigante": self.spr_sombra_gg}.get(z.tipo, self.spr_sombra)
                 tela.blit(sh, (sx - sh.get_width() / 2 + 4, sy - sh.get_height() / 2 + 6))
                 ang = math.degrees(z.ang_vis) + math.sin(z.balanco) * 6
                 spr = self.rot((z.tipo, z.var), self.spr_z[z.tipo][z.var], ang)
@@ -2327,6 +2373,11 @@ class Jogo:
                 tela.blit(spr, (sx - spr.get_width() / 2, sy - spr.get_height() / 2))
                 if z.viu > 0 and z.estado != "perseguir":
                     self.texto("?", (sx, sy - 30), self.f_med, (255, 220, 90), centro=True)
+                if z.tipo == "gigante":  # barra de vida do gigante
+                    fr = max(0, z.hp / 1100)
+                    pygame.draw.rect(tela, (20, 10, 10), (sx - 32, sy - 52, 64, 8), border_radius=3)
+                    pygame.draw.rect(tela, (220, 50, 40), (sx - 31, sy - 51, int(62 * fr), 6), border_radius=3)
+                    self.texto("GIGANTE", (sx, sy - 64), self.f_peq, (255, 160, 140), centro=True)
         psx = p.x - camx
         psy = p.y - camy
         tela.blit(self.spr_sombra, (psx - self.spr_sombra.get_width() / 2 + 4, psy - self.spr_sombra.get_height() / 2 + 6))
@@ -2349,6 +2400,9 @@ class Jogo:
             if q[8] == "f":
                 cor = G.mistura((80, 70, 60), cor, k)
             pygame.draw.circle(tela, cor, (int(q[0] - camx), int(q[1] - camy)), max(1, int(q[7] * (0.5 + k * 0.5))))
+        for nmr in self.numeros:
+            cor = (255, 210, 80) if nmr[4] else (255, 255, 255)
+            self.texto(nmr[2], (nmr[0] - camx, nmr[1] - camy), self.f_med if nmr[4] else self.f_peq, cor, centro=True)
         # copas e capim alto
         for cy in range(cy0, cy1 + 1):
             for cx in range(cx0, cx1 + 1):

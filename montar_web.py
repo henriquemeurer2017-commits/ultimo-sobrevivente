@@ -19,3 +19,33 @@ if "--testar" not in sys.argv:
     args.append("--build")
 args.append(WEB)
 subprocess.run(args, cwd=WEB, check=True)
+
+# ajusta a pagina: fundo preto, comeca sozinho (sem clique) e entra em tela cheia no primeiro toque
+pagina = os.path.join(WEB, "build", "web", "index.html")
+if os.path.exists(pagina):
+    with open(pagina, encoding="utf-8") as f:
+        html = f.read()
+    html = html.replace("ume_block : 1,", "ume_block : 0,")
+    html = html.replace("background-color:powderblue;", "background-color:#000; overflow:hidden;")
+    html = html.replace('''            background: green;
+            color: blue;''', '''            background: #1a1414;
+            color: #e8d8c8;
+            border-radius: 8px;
+            left: 50%; top: 50%; transform: translate(-50%, -50%);''')
+    html = html.replace("Loading, please wait ...", "Carregando o Último Sobrevivente... (na primeira vez demora uns 30 segundos)")
+    extra = """
+<script>
+// tela cheia no primeiro clique ou tecla (o navegador so deixa depois de um toque)
+function telaCheia() {
+    const el = document.documentElement;
+    if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(() => {});
+}
+document.addEventListener("pointerdown", telaCheia, {once: true});
+document.addEventListener("keydown", telaCheia, {once: true});
+</script>
+</body>"""
+    if "function telaCheia" not in html:
+        html = html.replace("</body>", extra, 1)
+    with open(pagina, "w", encoding="utf-8") as f:
+        f.write(html)
+    print("pagina ajustada: tela cheia e sem clique para comecar")

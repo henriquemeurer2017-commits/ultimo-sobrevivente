@@ -149,7 +149,7 @@ config = {
     user_canvas : 0,
     user_canvas_managed : 0,
     gui_divider : 2,
-    ume_block : 1,
+    ume_block : 0,
     can_close : 0,
     archive : "versao_web",
     gui_debug : 2,
@@ -206,8 +206,10 @@ function show_infobox() {
 
         #infobox {
             position: fixed; /* center relative to viewport */
-            background: green;
-            color: blue;
+            background: #1a1414;
+            color: #e8d8c8;
+            border-radius: 8px;
+            left: 50%; top: 50%; transform: translate(-50%, -50%);
             font-weight: bold;
             padding: 12px 24px;
  /*           display: none; */
@@ -240,7 +242,7 @@ function show_infobox() {
             font-family: arial;
             margin: 0;
             padding: none;
-            background-color:powderblue;
+            background-color:#000; overflow:hidden;
         }
 
         .topright{
@@ -312,7 +314,7 @@ height="720px"
     oncontextmenu="event.preventDefault()" tabindex=1 hidden>
     </canvas>
 
-    <div id="infobox">Loading, please wait ...</div>
+    <div id="infobox">Carregando o Último Sobrevivente... (na primeira vez demora uns 30 segundos)</div>
 
     <div id=html></div>
 
@@ -434,5 +436,15 @@ frameborder="1"
 
     </script>
 
+
+<script>
+// tela cheia no primeiro clique ou tecla (o navegador so deixa depois de um toque)
+function telaCheia() {
+    const el = document.documentElement;
+    if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(() => {});
+}
+document.addEventListener("pointerdown", telaCheia, {once: true});
+document.addEventListener("keydown", telaCheia, {once: true});
+</script>
 </body>
 </html>
