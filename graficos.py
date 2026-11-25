@@ -411,6 +411,26 @@ def sprite_barricada():
     return s
 
 
+def sprite_arame():
+    s = pygame.Surface((80, 30), pygame.SRCALPHA)
+    for px in (6, 40, 74):
+        pygame.draw.rect(s, (90, 70, 46), (px - 2, 4, 5, 22), border_radius=1)
+    for k, yy in enumerate((9, 15, 21)):
+        pts = [(2 + i * 4, yy + (2 if (i + k) % 2 else -2)) for i in range(20)]
+        pygame.draw.lines(s, (150, 150, 158), False, pts, 1)
+        for i in range(2, 20, 3):
+            pygame.draw.line(s, (190, 190, 196), (pts[i][0] - 2, pts[i][1] - 2), (pts[i][0] + 2, pts[i][1] + 2), 1)
+    return s
+
+
+def sprite_ponte():
+    s = pygame.Surface((96, 96), pygame.SRCALPHA)
+    for i in range(8):
+        pygame.draw.rect(s, (110, 80, 50), (0, i * 12, 96, 11))
+        pygame.draw.rect(s, (150, 112, 70), (0, i * 12 + 1, 96, 7))
+    return s
+
+
 def sprite_fogueira():
     s = pygame.Surface((40, 40), pygame.SRCALPHA)
     for i in range(10):

@@ -23,8 +23,8 @@ ESTRUTURA = {PISO_MAD, PISO_HOSP, PISO_CONC, PAREDE, PAREDE_CONC, PORTA, PONTE}
 
 # ---- tempo / sobrevivencia (jogo longo) ----
 DIA_SEG = 960.0          # um dia inteiro = 16 minutos reais
-FOME_SEG = 1500.0        # barra de fome esvazia em 25 min
-SEDE_SEG = 1000.0        # barra de sede esvazia em ~17 min
+FOME_SEG = 2600.0        # barra de fome esvazia em ~43 min
+SEDE_SEG = 1800.0        # barra de sede esvazia em 30 min
 PECAS_RADIO = 5          # pecas para consertar o radio e chamar o resgate
 TEMPO_RESGATE = 240.0    # segundos aguentando a horda ate o helicoptero
 
@@ -113,5 +113,7 @@ RECEITAS = [
     dict(id="barricada", nome="Barricada", custo={"tabua": 4}),
     dict(id="fogueira", nome="Fogueira", custo={"tabua": 3}),
     dict(id="abrigo", nome="Bunker (abrigo)", custo={"tabua": 25, "sucata": 15, "ferramentas": 1}),
+    dict(id="arame", nome="Arame farpado", custo={"sucata": 3}),
+    dict(id="ponte", nome="Ponte de madeira", custo={"tabua": 4}),
 ]
 RAIO_ABRIGO = 260

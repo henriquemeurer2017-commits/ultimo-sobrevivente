@@ -420,6 +420,21 @@ class Mundo:
             # despensa (muita comida e agua) e arsenal (armas melhores) dentro de cada bunker
             i = b["indice"]
             x, y, w, h = b["x"], b["y"], b["w"], b["h"]
+            # segunda porta, do lado oposto, para achar a entrada mais facil
+            pts = b.get("portas", [])
+            if pts:
+                if all(py == y for _, py in pts):
+                    novas = [(x + w // 2 - 1, y + h - 1), (x + w // 2, y + h - 1)]
+                elif all(py == y + h - 1 for _, py in pts):
+                    novas = [(x + w // 2 - 1, y), (x + w // 2, y)]
+                elif all(px == x for px, _ in pts):
+                    novas = [(x + w - 1, y + h // 2 - 1), (x + w - 1, y + h // 2)]
+                else:
+                    novas = [(x, y + h // 2 - 1), (x, y + h // 2)]
+                for px, py in novas:
+                    self.t[py * N + px] = PORTA
+                    self.tn[py, px] = PORTA
+                b["portas"] = list(pts) + novas
             self.moveis.append(dict(
                 id=len(self.moveis), x=(x + 6) * T + 30, y=(y + 1) * T + 18, tipo="despensa", aberto=False, predio=b,
                 itens=[["comida", rnd.randint(8, 12)], ["agua", rnd.randint(8, 12)], ["bandagem", 4], ["kit", 2]]))
@@ -428,7 +443,7 @@ class Mundo:
                 arsenal += [["rifle", 1], ["308", 25]]
             arsenal.append(["mochila2" if i == 0 else ("mochila3" if i in (1, 3) else "mochila4"), 1])
             self.moveis.append(dict(
-                id=len(self.moveis), x=(x + 5) * T + 16, y=(y + h - 2) * T + 14, tipo="arsenal", aberto=False, predio=b,
+                id=len(self.moveis), x=(x + 6) * T + 30, y=(y + h - 2) * T + 14, tipo="arsenal", aberto=False, predio=b,
                 itens=arsenal))
 
         # pilhas de tabuas e sucata nas cidades e vilas, e mochilas pelo chao
