@@ -123,6 +123,10 @@ class Jogo:
         self.f_med2 = pygame.font.SysFont("segoeui", 19)
         self.f_grande = pygame.font.SysFont("segoeui", 34, bold=True)
         self.f_titulo = pygame.font.SysFont("segoeui", 76, bold=True)
+        self.f_morte = pygame.font.SysFont("impact,segoeuiblack,arialblack", 170)
+        if NAVEGADOR:  # no navegador nao tem a letra Impact
+            self.f_morte = pygame.font.Font(None, 210)
+            self.f_morte.set_bold(True)
         self.sons = G.criar_sons()
         for novo, base in (("smg", "pistola"), ("besta", "clique"), ("facao", "faca")):
             if novo not in self.sons and base in self.sons:
@@ -1321,6 +1325,11 @@ class Jogo:
                 if d < 56 and d < md:
                     md = d
                     melhor = ("desmontar", c)
+        for c in getattr(m, "bancadas", ()):  # bancadas prontas dentro dos bunkers
+            d = math.hypot(c["x"] - p.x, c["y"] - p.y)
+            if d < 60 and d < md:
+                md = d
+                melhor = ("bancada", c)
         tor = m.torre
         if tor:
             cx = (tor["x"] + tor["w"] / 2) * T
@@ -2166,7 +2175,20 @@ class Jogo:
         sh = pygame.Surface((W, H), pygame.SRCALPHA)
         sh.fill((60, 0, 0, 170))
         self.tela.blit(sh, (0, 0))
-        self.texto("VOCÊ MORREU", (W // 2, 200), self.f_titulo, (240, 80, 70), centro=True)
+        # SE FUDEU: grandao, vermelho, pulsando e tremendo
+        t = time.time()
+        pulso = 1.0 + 0.06 * math.sin(t * 6)
+        img = self.__dict__.get("img_morte")
+        if img is None:
+            img = self.img_morte = self.f_morte.render("SE FUDEU", True, (235, 20, 20))
+            self.img_morte_sombra = self.f_morte.render("SE FUDEU", True, (40, 0, 0))
+        big = pygame.transform.smoothscale(img, (int(img.get_width() * pulso), int(img.get_height() * pulso)))
+        sbig = pygame.transform.smoothscale(self.img_morte_sombra, big.get_size())
+        tx = random.uniform(-3, 3)
+        ty = random.uniform(-3, 3)
+        r = big.get_rect(center=(W // 2 + tx, 150 + ty))
+        self.tela.blit(sbig, r.move(6, 7))
+        self.tela.blit(big, r)
         self.texto(f"Dia {self.dia}  ·  {self.mortes} zumbis derrubados", (W // 2, 280), self.f_med2, centro=True)
         self.texto("Sua mochila ficou caída onde você morreu (marcada no mapa).", (W // 2, 330), self.f_med2,
                    (230, 210, 200), centro=True)
@@ -2536,6 +2558,9 @@ class Jogo:
                     tela.blit(self.spr_abrigo, (c["x"] - camx - 56, c["y"] - camy - 56))
                 elif c["tipo"] == "bancada":
                     tela.blit(self.spr_bancada, (c["x"] - camx - 32, c["y"] - camy - 20))
+        for c in getattr(m, "bancadas", ()):
+            if vis.collidepoint(c["x"], c["y"]):
+                tela.blit(self.spr_bancada, (c["x"] - camx - 32, c["y"] - camy - 20))
         # zumbis e jogador
         for z in self.zumbis:
             if vis.collidepoint(z.x, z.y):

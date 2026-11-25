@@ -396,6 +396,7 @@ class Mundo:
 
     def _mochilas_e_materiais(self):
         """Mochilas (cada vez melhores) e mais material de construcao. Sorteio separado."""
+        self.bancadas = []
         rnd = random.Random(self.seed + 5151)
         casa = [mv for mv in self.moveis if mv["tipo"] in ("armario", "gaveta", "caixa")]
         malas = [mv for mv in self.moveis if mv["tipo"] == "porta_malas"]
@@ -495,6 +496,11 @@ class Mundo:
                 itens=arsenal))
             if porte == "grande":
                 self._aumentar_bunker(b, rnd)
+            # cada bunker tem uma bancada pronta para melhorar armas e mochila
+            bx = (b["x"] + 2) * T + 18
+            by = (b["y"] + b["h"] // 2) * T + 16
+            self.bancadas.append(dict(x=bx, y=by, bunker=b["indice"]))
+            self.add_colisor(bx, by, 16)
 
         # pilhas de tabuas e sucata nas cidades e vilas, e mochilas pelo chao
         def solta(item, q, cx, cy, raio):
