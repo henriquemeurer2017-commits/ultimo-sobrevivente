@@ -124,6 +124,9 @@ class Jogo:
         self.f_grande = pygame.font.SysFont("segoeui", 34, bold=True)
         self.f_titulo = pygame.font.SysFont("segoeui", 76, bold=True)
         self.sons = G.criar_sons()
+        for novo, base in (("smg", "pistola"), ("besta", "clique"), ("facao", "faca")):
+            if novo not in self.sons and base in self.sons:
+                self.sons[novo] = self.sons[base]
         self.rnd = random.Random()
         r = random.Random(42)
         self.spr_z = {"normal": [G.sprite_zumbi(r, "normal") for _ in range(16)],
@@ -401,6 +404,7 @@ class Jogo:
         self.acao = None
         self.t_spawn = 0.0
         self.na_calma = False
+        self.tremor = 0.0
         self.numeros = []
         self.esquiva = 0.0
         self.t_esquiva = 0.0
@@ -585,7 +589,7 @@ class Jogo:
                 self.pente[item] = self.rnd.randint(1, a["pente"])
             if avisar:
                 self.msg(f"Achou uma arma: {a['nome']}!  (tecla {ARMA_IDX[item] + 1})", (255, 220, 120))
-            if self.arma == "faca" or ARMA_IDX[item] > ARMA_IDX[self.arma]:
+            if self.arma == "faca":
                 self.arma = item
                 self.recarga_t = 0
             if "silenciador_guardado" in self.inv and a.get("silencia") and item not in self.silen:
@@ -813,17 +817,19 @@ class Jogo:
         ya = 486
         self.texto("ARMAS (clique para usar)", (450, ya), self.f_med, (255, 220, 140))
         for i, a in enumerate(ARMAS):
-            r = pygame.Rect(450 + i * 128, ya + 30, 120, 70)
+            r = pygame.Rect(450 + i * 88, ya + 30, 84, 70)
             tem = a["id"] in self.armas
             pygame.draw.rect(tela, (34, 36, 40), r, border_radius=8)
             if a["id"] == self.arma:
                 pygame.draw.rect(tela, (230, 190, 90), r, 2, border_radius=8)
             if tem:
-                G.desenha_icone(tela, a["id"], r.centerx, r.y + 26, 1.2)
-                extra = "" if a["melee"] else f"  {self.pente.get(a['id'], 0)}+{self.inv.get(a['mun'], 0)}"
-                if a["id"] in self.silen:
-                    extra += " S"
-                self.texto(a["nome"].split(" ")[0] + extra, (r.centerx, r.y + 54), self.f_peq, centro=True)
+                G.desenha_icone(tela, a["id"], r.centerx, r.y + 22, 1.1)
+                self.texto(a["nome"].split(" ")[0][:11], (r.centerx, r.y + 44), self.f_peq, centro=True)
+                if not a["melee"]:
+                    extra = f"{self.pente.get(a['id'], 0)}+{self.inv.get(a['mun'], 0)}"
+                    if a["id"] in self.silen:
+                        extra += " S"
+                    self.texto(extra, (r.centerx, r.y + 60), self.f_peq, (200, 195, 180), centro=True)
                 if self.click and r.collidepoint(pygame.mouse.get_pos()):
                     self.trocar_arma(a["id"])
             else:
@@ -1029,7 +1035,8 @@ class Jogo:
         if self.click and self.cliques_hud():
             self.click = False
             return
-        for i, key in enumerate((pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5, pygame.K_6)):
+        for i, key in enumerate((pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5, pygame.K_6,
+                                 pygame.K_7, pygame.K_8, pygame.K_9)):
             if key in tc:
                 if self.modo_construir is not None:
                     if i < len(RECEITAS):
@@ -1382,7 +1389,7 @@ class Jogo:
         self.decalque(s, z.x - s.get_width() / 2, z.y - s.get_height() / 2)
         self.decalque(corpo, z.x - corpo.get_width() / 2, z.y - corpo.get_height() / 2)
         if random.random() < 0.12:
-            item, q = sortear(random, LOOT["chao"], 1)[0]
+            item, q = sortear(random, LOOT_ZUMBI, 1)[0]
             self.drop_id += 1
             self.mundo.add_item_chao(dict(id=self.drop_id, x=z.x, y=z.y, item=item, q=q))
 
@@ -1460,6 +1467,7 @@ class Jogo:
         else:
             self.som(a["id"], 0.9)
             self.fazer_barulho(p.x, p.y, a["ruido"])
+            self.tremor = max(self.tremor, TREMOR.get(a["id"], 2) * (0.5 if a["id"] in self.silen else 1.0))
             self.flash_t = 0.05
         self.flash_pos = (ox, oy)
 
@@ -1588,6 +1596,7 @@ class Jogo:
                 self.som("pegar", 0.5)
         # zumbis
         self.atualizar_zumbis(dt)
+        self.tremor = max(0.0, self.tremor - 30 * dt)
         # numeros de dano subindo
         for nmr in self.numeros:
             nmr[1] -= 45 * dt
@@ -1872,6 +1881,7 @@ class Jogo:
             if d < z.r + p.r + 8 and z.t_ataque <= 0 and not seguro and self.esquiva <= 0:
                 z.t_ataque = {"gordo": 1.4, "corredor": 0.7, "gigante": 1.7}.get(z.tipo, 1.0)
                 p.vida -= z.dano
+                self.tremor = max(self.tremor, 6 if z.tipo != "gigante" else 14)
                 self.machucar()
                 self.dano_t = 0.45
                 self.som("dor", 0.7)
@@ -2308,6 +2318,9 @@ class Jogo:
         p = self.p
         camx = int(self.cam[0] - W / 2)
         camy = int(self.cam[1] - H / 2)
+        if self.tremor > 0.3:  # a tela treme nos tiros fortes e quando voce apanha
+            camx += int(random.uniform(-self.tremor, self.tremor))
+            camy += int(random.uniform(-self.tremor, self.tremor))
         cx0 = camx // CHPX
         cy0 = camy // CHPX
         cx1 = (camx + W) // CHPX
@@ -2626,12 +2639,12 @@ class Jogo:
                 self.texto("silenciador", (W - 120, H - 92), self.f_peq, (150, 210, 255))
         x = W - 320
         for i, aa in enumerate(ARMAS):
-            r = pygame.Rect(x + i * 51, H - 50, 46, 30)
+            r = pygame.Rect(x + 4 + i * 34, H - 50, 31, 30)
             tem = aa["id"] in self.armas
             pygame.draw.rect(tela, (60, 50, 30) if aa["id"] == self.arma else (30, 32, 36), r, border_radius=6)
             pygame.draw.rect(tela, (230, 190, 90) if aa["id"] == self.arma else (70, 70, 76), r, 1, border_radius=6)
             if tem:
-                G.desenha_icone(tela, aa["id"], r.centerx, r.centery + 1, 0.9)
+                G.desenha_icone(tela, aa["id"], r.centerx, r.centery + 1, 0.7)
             self.texto(str(i + 1), (r.x + 3, r.y - 2), self.f_peq, (200, 200, 200) if tem else (90, 90, 90), sombra=False)
         # itens rapidos
         itens = [("comida", "F"), ("agua", "G"), ("bandagem", "H"), ("kit", "J"), ("tabua", ""), ("sucata", ""),

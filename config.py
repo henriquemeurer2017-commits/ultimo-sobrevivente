@@ -44,6 +44,10 @@ ITENS = {
     "556": "Munição de fuzil",
     "308": "Munição de rifle",
     "silenciador": "Silenciador",
+    "flecha": "Flechas",
+    "facao": "Facão",
+    "smg": "Submetralhadora",
+    "besta": "Besta",
     "tabua": "Tábuas",
     "sucata": "Sucata de metal",
     "ferramentas": "Ferramentas",
@@ -73,7 +77,14 @@ ARMAS = [
          balas=1, alcance=950, recarga=2.2, ruido=1100, auto=True, silencia=True, fura=1),
     dict(id="rifle", nome="Rifle de precisão", melee=False, mun="308", pente=5, dano=150, cd=1.1, disp=0.004,
          balas=1, alcance=1500, recarga=2.6, ruido=1400, auto=False, silencia=True, fura=3),
+    dict(id="facao", nome="Facão", melee=True, dano=58, cd=0.42, alcance=60, ruido=0),
+    dict(id="smg", nome="Submetralhadora", melee=False, mun="9mm", pente=32, dano=19, cd=0.065, disp=0.075,
+         balas=1, alcance=650, recarga=1.8, ruido=900, auto=True, silencia=True, fura=0),
+    dict(id="besta", nome="Besta", melee=False, mun="flecha", pente=1, dano=130, cd=0.3, disp=0.008,
+         balas=1, alcance=950, recarga=1.3, ruido=30, auto=False, silencia=False, fura=1),
 ]
+# quanto a tela treme em cada tiro
+TREMOR = {"pistola": 2.5, "espingarda": 8, "fuzil": 2.2, "rifle": 9, "smg": 1.8, "besta": 1.5}
 ARMA_IDX = {a["id"]: i for i, a in enumerate(ARMAS)}
 ARMAS_IDS = set(ARMA_IDX)
 
@@ -95,6 +106,8 @@ LOOT = {
              ("pistola", 4, 1, 1), ("espingarda", 2.5, 1, 1), ("machado", 3, 1, 1), ("fuzil", 1.2, 1, 1),
              ("rifle", 1.2, 1, 1), ("silenciador", 1.6, 1, 1), ("kit", 1.5, 1, 1)],
 }
+# o que um zumbi derrubado pode deixar cair (inclui as armas novas)
+LOOT_ZUMBI = LOOT["chao"] + [("facao", 1.5, 1, 1), ("smg", 0.6, 1, 1), ("besta", 0.6, 1, 1), ("flecha", 4, 3, 8)]
 
 NOMES_MOVEIS = {
     "armario": "armário", "geladeira": "geladeira", "gaveta": "cômoda", "caixa": "caixa",
@@ -105,7 +118,8 @@ NOMES_MOVEIS = {
 
 # espaco que cada unidade ocupa na mochila
 ESPACO = {"comida": 1, "agua": 1, "bandagem": 0.5, "kit": 1.5, "9mm": 0.04, "12": 0.08, "556": 0.04, "308": 0.08,
-          "tabua": 1, "sucata": 1, "ferramentas": 2, "seringa": 0.5, "saco": 4}
+          "tabua": 1, "sucata": 1, "ferramentas": 2, "seringa": 0.5, "saco": 4,
+          "flecha": 0.15}
 # estacoes do ano: cada uma dura 6 dias. (nome, multiplica cor, soma cor, fome x, sede x)
 ESTACOES = [("Verão", (1.04, 1.02, 0.92), (8, 6, 0), 1.0, 1.35),
             ("Outono", (1.12, 0.92, 0.70), (14, 4, 0), 1.0, 1.0),

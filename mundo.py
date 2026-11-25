@@ -421,6 +421,23 @@ class Mundo:
         for mv in malas[45:]:
             if rnd.random() < 0.4:
                 mv["itens"].append(["sucata", rnd.randint(2, 4)])
+        # armas novas (facao, submetralhadora, besta) e flechas: sorteio separado
+        for mv in casa:
+            r = rnd.random()
+            if r < 0.06:
+                mv["itens"].append(["facao", 1])
+            elif r < 0.09:
+                mv["itens"].append(["smg", 1])
+            elif r < 0.12:
+                mv["itens"].append(["besta", 1])
+            if rnd.random() < 0.12:
+                mv["itens"].append(["flecha", rnd.randint(3, 8)])
+        for mv in self.moveis:
+            if mv["tipo"] == "militar":
+                if rnd.random() < 0.25:
+                    mv["itens"].append(["smg" if rnd.random() < 0.55 else "besta", 1])
+                if rnd.random() < 0.4:
+                    mv["itens"].append(["flecha", rnd.randint(6, 14)])
         # seringas rarissimas nos hospitais
         medicos = [mv for mv in self.moveis if mv["tipo"] == "medico" and (mv.get("predio") or {}).get("tipo") != "militar"]
         rnd.shuffle(medicos)
