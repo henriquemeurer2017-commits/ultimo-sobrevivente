@@ -176,6 +176,7 @@ class Jogo:
         self.teclas = set()
         self.roda = 0
         self.fake = None
+        self.letras = ""
         self.recorde = self.ler_recorde()
         # o modo dono agora vale so por mundo; moedas de dono nao contam fora do mundo dele
         self.recorde.pop("dono", None)
@@ -295,33 +296,88 @@ class Jogo:
 
     # ================================================================ menus
     def criar_fundo_menu(self):
-        s = pygame.Surface((W, H))
-        for y in range(H):
-            k = y / H
-            pygame.draw.line(s, G.mistura((10, 14, 26), (44, 38, 40), k), (0, y), (W, y))
-        for k in range(6):
-            pygame.draw.circle(s, G.mistura((10, 14, 26), (60, 60, 70), (k + 1) / 7), (1150, 300), 120 - k * 10)
-        pygame.draw.circle(s, (230, 226, 200), (1150, 300), 56)
-        pygame.draw.circle(s, (210, 206, 180), (1135, 288), 10)
-        pygame.draw.circle(s, (210, 206, 180), (1166, 318), 7)
+        """Fundo da tela de inicio: cidade destruida pegando fogo, de noite."""
         r = random.Random(7)
-        for camada, (cor, base, alt) in enumerate([((22, 30, 30), 560, 220), ((14, 20, 20), 640, 260)]):
-            x = -40
-            while x < W + 40:
-                h = r.randint(alt // 2, alt)
-                larg = r.randint(40, 80)
-                pts = [(x, base + 40)]
-                for k in range(6):
-                    yk = base - h * (1 - k / 6)
-                    pts.insert(0, (x - larg * (1 - k / 6) / 2, yk + 30))
-                    pts.append((x + larg * (1 - k / 6) / 2, yk + 30))
-                pygame.draw.polygon(s, cor, [(x, base - h)] + [(x - larg / 2, base + 40), (x + larg / 2, base + 40)])
-                for k in range(5):
-                    yk = base - h + h * k / 5
-                    w_ = larg * (k + 1) / 5
-                    pygame.draw.polygon(s, cor, [(x, yk - 10), (x - w_ / 2, yk + h / 5), (x + w_ / 2, yk + h / 5)])
-                x += r.randint(30, 70)
-            pygame.draw.rect(s, cor, (0, base + 30, W, H))
+        # ceu: roxo escuro em cima, laranja do fogo perto do horizonte
+        yy = np.linspace(0, 1, H, dtype=np.float32)[None, :, None]
+        topo = np.array([8, 8, 22], np.float32)
+        meio = np.array([40, 18, 40], np.float32)
+        baixo = np.array([150, 60, 30], np.float32)
+        k1 = np.clip(yy / 0.55, 0, 1)
+        k2 = np.clip((yy - 0.55) / 0.25, 0, 1)
+        ceu = topo + (meio - topo) * k1
+        ceu = ceu + (baixo - ceu) * k2
+        arr = np.repeat(ceu, W, axis=0)
+        # brilho do incendio no horizonte
+        xx = np.linspace(0, 1, W, dtype=np.float32)[:, None]
+        for cx, forca in ((0.22, 1.0), (0.63, 0.8), (0.88, 0.6)):
+            d = np.sqrt(((xx - cx) * 2.2) ** 2 + ((yy[0, :, 0][None, :] - 0.74) * 3.5) ** 2)
+            arr += (np.clip(1 - d, 0, 1) ** 2 * forca)[:, :, None] * np.array([120, 50, 10], np.float32)
+        s = pygame.surfarray.make_surface(np.clip(arr, 0, 255).astype(np.uint8))
+        # estrelas
+        for _ in range(140):
+            x, y = r.randint(0, W), r.randint(0, int(H * 0.45))
+            c = r.randint(120, 230)
+            s.set_at((x, y), (c, c, min(255, c + 20)))
+        # lua com brilho
+        for k in range(10):
+            pygame.draw.circle(s, G.mistura((26, 20, 40), (90, 80, 90), (k + 1) / 12), (1080, 120), 110 - k * 6)
+        pygame.draw.circle(s, (232, 226, 205), (1080, 120), 48)
+        pygame.draw.circle(s, (210, 204, 182), (1066, 108), 9)
+        pygame.draw.circle(s, (214, 208, 186), (1095, 136), 6)
+        pygame.draw.circle(s, (205, 200, 178), (1090, 100), 4)
+        # nuvens de fumaca escura
+        fum = pygame.Surface((W, H), pygame.SRCALPHA)
+        for _ in range(40):
+            x, y = r.randint(-100, W), r.randint(150, 420)
+            pygame.draw.ellipse(fum, (20, 14, 18, r.randint(25, 60)), (x, y, r.randint(160, 360), r.randint(40, 90)))
+        s.blit(fum, (0, 0))
+        # cidade destruida (duas camadas de predios)
+        for cor, base, alt, luz in (((34, 22, 30), 520, 260, 0.05), ((16, 11, 16), 560, 200, 0.12)):
+            x = -20
+            while x < W + 20:
+                larg = r.randint(50, 120)
+                h = r.randint(alt // 3, alt)
+                topo_y = base - h
+                pts = [(x, base + 200), (x, topo_y)]
+                # topo quebrado
+                for k in range(1, 5):
+                    pts.append((x + larg * k / 5, topo_y + r.randint(-6, 26)))
+                pts += [(x + larg, topo_y + r.randint(0, 30)), (x + larg, base + 200)]
+                pygame.draw.polygon(s, cor, pts)
+                if r.random() < 0.25:  # antena
+                    pygame.draw.line(s, cor, (x + larg // 2, topo_y), (x + larg // 2, topo_y - r.randint(20, 50)), 2)
+                for wy in range(topo_y + 28, base, 18):  # janelas
+                    for wx in range(x + 8, x + larg - 8, 14):
+                        if r.random() < luz:
+                            pygame.draw.rect(s, r.choice([(255, 200, 90), (240, 160, 60), (200, 220, 255)]), (wx, wy, 5, 7))
+                x += larg + r.randint(-10, 12)
+        # mato e chao na frente
+        for x in range(-20, W + 40, 18):
+            h = r.randint(30, 90)
+            pygame.draw.polygon(s, (8, 8, 10), [(x - 14, 600), (x, 600 - h), (x + 14, 600)])
+        pygame.draw.rect(s, (8, 8, 10), (0, 596, W, H))
+        # carro abandonado na frente
+        pygame.draw.rect(s, (12, 12, 14), (140, 560, 170, 46), border_radius=12)
+        pygame.draw.rect(s, (12, 12, 14), (180, 532, 96, 40), border_radius=10)
+        pygame.draw.circle(s, (4, 4, 6), (180, 606), 18)
+        pygame.draw.circle(s, (4, 4, 6), (276, 606), 18)
+        # brilho de fogo pronto (para piscar)
+        self.fogo_menu = []
+        for cx, cy, R in ((280, 470, 150), (800, 500, 120), (1120, 520, 100)):
+            yy2, xx2 = np.mgrid[0:R * 2, 0:R * 2]
+            d = np.sqrt((xx2 - R + 0.5) ** 2 + (yy2 - R + 0.5) ** 2) / R
+            forca = np.clip(1 - d, 0, 1) ** 1.6
+            niveis = []
+            for n in range(8):  # varias intensidades prontas: o fogo pisca trocando entre elas
+                k = 0.35 + 0.65 * n / 7
+                rgb = (forca[:, :, None] * np.array([170, 75, 18], np.float32) * k).transpose(1, 0, 2)
+                niveis.append(pygame.surfarray.make_surface(rgb.astype(np.uint8)))
+            self.fogo_menu.append((niveis, cx, cy))
+        self.brasas = [[r.uniform(0, W), r.uniform(0, H), r.uniform(10, 40), r.uniform(0, 6)] for _ in range(60)]
+        self.fumaca_menu = [[r.choice((280, 800, 1120)) + r.uniform(-40, 40), r.uniform(300, 520), r.uniform(10, 30)]
+                            for _ in range(24)]
+        self.zumbis_menu = [[r.uniform(-200, W), r.uniform(14, 26), r.uniform(0.8, 1.15), r.uniform(0, 6)] for _ in range(5)]
         return s
 
     def botao(self, texto, cx, y, w=320, ativo=True):
@@ -359,17 +415,100 @@ class Jogo:
 
     def desenhar_fundo_menu(self, dt):
         self.t_menu += dt
-        self.tela.blit(self.fundo_menu, (0, 0))
+        t = self.t_menu
+        tela = self.tela
+        tela.blit(self.fundo_menu, (0, 0))
+        # incendios piscando
+        for i, (niveis, cx, cy) in enumerate(self.fogo_menu):
+            k = 0.5 + 0.5 * math.sin(t * 7 + i * 2) * math.sin(t * 3.1 + i)
+            fogo = niveis[min(7, max(0, int(k * 8)))]
+            tela.blit(fogo, (cx - fogo.get_width() // 2, cy - fogo.get_height() // 2), special_flags=pygame.BLEND_RGB_ADD)
+            # chamas
+            for n in range(7):
+                fx = cx - 48 + n * 16
+                alt = 34 + 22 * math.sin(t * 9 + n * 1.7 + i) + 10 * math.sin(t * 4.3 + n)
+                base_y = cy + 46
+                for cor, esc in (((230, 70, 20), 1.0), ((255, 150, 40), 0.7), ((255, 225, 120), 0.4)):
+                    h = alt * esc
+                    pygame.draw.polygon(tela, cor, [(fx - 9 * esc, base_y), (fx + math.sin(t * 6 + n) * 4, base_y - h),
+                                                    (fx + 9 * esc, base_y)])
+        # fumaca subindo dos incendios
+        for f in self.fumaca_menu:
+            f[1] -= f[2] * dt
+            if f[1] < 120:
+                f[1] = 540
+            a = int(70 * min(1, (f[1] - 120) / 300))
+            rr = int(30 + (540 - f[1]) * 0.15)
+            sup = self.__dict__.setdefault("bola_fumaca", {})
+            if rr not in sup:
+                b = pygame.Surface((rr * 2, rr * 2), pygame.SRCALPHA)
+                pygame.draw.circle(b, (30, 24, 28, 255), (rr, rr), rr)
+                sup[rr] = b
+            b = sup[rr]
+            b.set_alpha(a)
+            tela.blit(b, (f[0] + math.sin(t + f[1] * 0.02) * 20 - rr, f[1] - rr))
+        # zumbis andando na frente (silhuetas)
+        for z in self.zumbis_menu:
+            z[0] += z[1] * dt
+            if z[0] > W + 80:
+                z[0] = -80
+            e = z[2]
+            x, y = z[0], 596
+            passo = math.sin(t * 3 + z[3])
+            cor = (6, 6, 8)
+            pygame.draw.line(tela, cor, (x, y - 34 * e), (x - 9 * e * passo, y), int(6 * e))
+            pygame.draw.line(tela, cor, (x, y - 34 * e), (x + 9 * e * passo, y), int(6 * e))
+            pygame.draw.ellipse(tela, cor, (x - 9 * e, y - 72 * e, 18 * e, 42 * e))
+            pygame.draw.circle(tela, cor, (int(x + 3 * e), int(y - 80 * e)), int(9 * e))
+            pygame.draw.line(tela, cor, (x, y - 62 * e), (x + 26 * e, y - 60 * e + 3 * passo), int(5 * e))
+            pygame.draw.line(tela, cor, (x, y - 56 * e), (x + 24 * e, y - 52 * e - 3 * passo), int(5 * e))
+        # brasas subindo
+        for b in self.brasas:
+            b[1] -= b[2] * dt
+            b[0] += math.sin(t * 1.5 + b[3]) * 10 * dt
+            if b[1] < 0:
+                b[1] = H
+                b[0] = random.uniform(0, W)
+            brilho = 180 + int(70 * math.sin(t * 6 + b[3]))
+            tela.fill((255, brilho // 2 + 60, 40), (int(b[0]), int(b[1]), 2, 2))
+        # neblina no chao
         nevoa = pygame.Surface((W, 200), pygame.SRCALPHA)
         for i in range(8):
-            x = (i * 260 + self.t_menu * (12 + i * 3)) % (W + 400) - 200
-            pygame.draw.ellipse(nevoa, (180, 190, 200, 18), (x, 60 + (i % 3) * 30, 420, 90))
-        self.tela.blit(nevoa, (0, 480))
-        self.tela.blit(self.vinheta, (0, 0))
+            x = (i * 260 + t * (12 + i * 3)) % (W + 400) - 200
+            pygame.draw.ellipse(nevoa, (170, 150, 150, 16), (x, 60 + (i % 3) * 30, 420, 90))
+        tela.blit(nevoa, (0, 480))
+        tela.blit(self.vinheta, (0, 0))
+
+    def titulo_menu(self, y=140):
+        """Titulo grande com contorno escuro e brilho vermelho."""
+        img = self.__dict__.get("img_titulo")
+        if img is None:
+            fonte = self.f_titulo
+            letra = fonte.render("ÚLTIMO SOBREVIVENTE", True, (235, 70, 50))
+            borda = fonte.render("ÚLTIMO SOBREVIVENTE", True, (20, 4, 4))
+            img = pygame.Surface((letra.get_width() + 12, letra.get_height() + 12), pygame.SRCALPHA)
+            for dx in range(-3, 4):
+                for dy in range(-3, 4):
+                    if dx * dx + dy * dy <= 10:
+                        img.blit(borda, (6 + dx, 6 + dy))
+            img.blit(letra, (6, 6))
+            self.img_titulo = img
+            mask = pygame.mask.from_surface(letra, 20)
+            sil = mask.to_surface(setcolor=(255, 60, 30, 255), unsetcolor=(255, 60, 30, 0))
+            base = pygame.Surface(img.get_size(), pygame.SRCALPHA)
+            base.blit(sil, (6, 6))
+            brilho = pygame.transform.smoothscale(base, (img.get_width() // 8, img.get_height() // 8))
+            self.img_titulo_brilho = pygame.transform.smoothscale(brilho, img.get_size())
+        k = 0.6 + 0.4 * math.sin(self.t_menu * 2)
+        b = self.img_titulo_brilho
+        b.set_alpha(int(150 * k))
+        r = img.get_rect(center=(W // 2, y))
+        self.tela.blit(b, r.move(0, 2))
+        self.tela.blit(img, r)
 
     def tela_menu(self, dt):
         self.desenhar_fundo_menu(dt)
-        self.texto("ÚLTIMO SOBREVIVENTE", (W // 2, 140), self.f_titulo, (225, 70, 55), centro=True)
+        self.titulo_menu(140)
         self.texto("um apocalipse zumbi em mundo aberto", (W // 2, 205), self.f_med2, (210, 200, 190), centro=True)
         y = 290
         if self.botao("Jogar", W // 2, y):
@@ -408,7 +547,7 @@ class Jogo:
             self.texto(nome, (r.x + 60, r.y + 6), self.f_med, (240, 225, 200))
             self.texto(f"Dia {dia}   ·   {mortes} zumbis derrubados", (r.x + 60, r.y + 31), self.f_peq, (190, 180, 170))
             if self.botao_peq("Jogar", pygame.Rect(r.right - 230, r.y + 10, 110, 36), (60, 90, 50)):
-                self.carregar(arq)
+                self.comecar_carga(self.carregar_passos(arq))
                 return
             certeza = self.__dict__.get("apagar_qual") == arq
             if self.botao_peq("Certeza?" if certeza else "Apagar", pygame.Rect(r.right - 112, r.y + 10, 100, 36),
@@ -443,10 +582,50 @@ class Jogo:
             nome_final = nome.strip() or f"Mundo {len(mundos) + 1}"
             self.arq = self.arquivo_novo()
             self.nome_mundo = nome_final
-            self.novo_jogo()
-            self.salvar()
+
+            def criar():
+                yield from self.novo_jogo_passos()
+                self.salvar()
+            self.comecar_carga(criar())
             return
         if self.botao("Voltar", W // 2, 640, w=220):
+            self.estado = "menu"
+
+    def comecar_carga(self, passos):
+        self.ger_carga = passos
+        self.txt_carga = "Preparando..."
+        self.t_carga = 0.0
+        self.estado = "carregando"
+
+    def tela_carregando(self, dt):
+        """Monta o mundo um passo por quadro, mostrando o progresso (o navegador nao trava)."""
+        self.desenhar_fundo_menu(dt)
+        self.t_carga = self.__dict__.get("t_carga", 0.0) + dt
+        self.titulo_menu(200)
+        caixa = pygame.Rect(W // 2 - 300, 300, 600, 120)
+        self.painel(caixa, 200)
+        self.texto(self.__dict__.get("txt_carga", "Preparando..."), (W // 2, 336), self.f_med2, (240, 225, 200), centro=True)
+        pontos = "." * (1 + int(self.t_carga * 3) % 3)
+        self.texto("Carregando o mundo" + pontos, (W // 2, 378), self.f_med, (255, 200, 120), centro=True)
+        ger = self.__dict__.get("ger_carga")
+        if ger is None:
+            self.estado = "menu"
+            return
+        try:
+            next(ger)
+        except StopIteration:
+            self.ger_carga = None
+            if self.estado == "carregando":
+                self.estado = "jogo"
+        except Exception:
+            import traceback
+            try:
+                with open(ERRO_FILE, "a", encoding="utf-8") as f:
+                    f.write(traceback.format_exc())
+            except Exception:
+                pass
+            print(traceback.format_exc())
+            self.ger_carga = None
             self.estado = "menu"
 
     def tela_confirmar(self, dt):
@@ -498,7 +677,15 @@ class Jogo:
 
     # ================================================================ novo / salvar / carregar
     def preparar(self, seed):
-        self.mundo = Mundo(seed, self.aviso_carregando)
+        for _ in self.preparar_passos(seed):
+            pass
+
+    def preparar_passos(self, seed):
+        m = Mundo.__new__(Mundo)
+        for txt in m.gerar(seed):
+            self.txt_carga = txt
+            yield txt
+        self.mundo = m
         self.n_itens_base = len(self.mundo.itens_chao)
         self.n_moveis_base = len(self.mundo.moveis)
         self.cache_chao = OrderedDict()
@@ -557,8 +744,12 @@ class Jogo:
         self.drop_id = 10 ** 7
 
     def novo_jogo(self, seed=None):
+        for _ in self.novo_jogo_passos(seed):
+            pass
+
+    def novo_jogo_passos(self, seed=None):
         seed = seed if seed is not None else random.randrange(1, 10 ** 9)
-        self.preparar(seed)
+        yield from self.preparar_passos(seed)
         m = self.mundo
         self.p = Jogador(*m.inicio)
         self.respawn = list(m.inicio)
@@ -613,6 +804,10 @@ class Jogo:
             self.msg(f"Não consegui salvar: {e}", (255, 120, 100))
 
     def carregar(self, arq=None):
+        for _ in self.carregar_passos(arq):
+            pass
+
+    def carregar_passos(self, arq=None):
         if arq:
             self.arq = arq
         try:
@@ -621,9 +816,9 @@ class Jogo:
             self.nome_mundo = d.get("nome", "Meu mundo")
         except Exception:
             self.msg("Save estragado, começando de novo.")
-            self.novo_jogo()
+            yield from self.novo_jogo_passos()
             return
-        self.preparar(d["seed"])
+        yield from self.preparar_passos(d["seed"])
         m = self.mundo
         self.p = Jogador(d["x"], d["y"])
         self.p.vida, self.p.fome, self.p.sede = d["vida"], d["fome"], d["sede"]
@@ -2390,7 +2585,12 @@ class Jogo:
                 self.msg("Saindo da região calma. Cuidado.", (240, 190, 140))
         self.t_spawn -= dt
         if self.t_spawn <= 0 and len(self.zumbis) < alvo:
-            self.t_spawn = 0.12 if self.resgate is not None else (2.2 if na_cidade else 5.0)
+            if self.resgate is not None:
+                self.t_spawn = 0.12
+            elif na_cidade:  # chegando na cidade enche rapido, depois vai devagar
+                self.t_spawn = 0.6 if len(self.zumbis) < alvo // 2 else 2.0
+            else:
+                self.t_spawn = 5.0
             self.criar_zumbi(esc)
         visao = 190 * (1 - esc) + esc * (150 if self.lanterna else 95)
         if self.chuva:
@@ -2449,6 +2649,7 @@ class Jogo:
                             # na cidade eles andam pelas ruas, chegando aos poucos perto de voce
                             z.ang = math.atan2(p.y - z.y, p.x - z.x) + random.uniform(-0.8, 0.8)
                             z.parado = False
+                            z.na_rua = True
                         else:
                             z.ang = random.uniform(0, 6.283)
                             z.parado = random.random() < 0.4
@@ -2466,7 +2667,8 @@ class Jogo:
                     vel *= self.no_arame(z, dt)
                     self.passo_zumbi(z, math.atan2(ay, ax), vel * dt)
             elif not z.parado:
-                self.passo_zumbi(z, z.ang, z.vel * 0.3 * dt * self.no_arame(z, dt), vagando=True)
+                rapido = 0.55 if getattr(z, "na_rua", False) and na_cidade else 0.3
+                self.passo_zumbi(z, z.ang, z.vel * rapido * dt * self.no_arame(z, dt), vagando=True)
             # ataque
             if d < z.r + p.r + 8 and z.t_ataque <= 0 and not seguro and self.esquiva <= 0:
                 z.t_ataque = {"gordo": 1.4, "corredor": 0.7, "gigante": 1.7}.get(z.tipo, 1.0)
@@ -2567,7 +2769,7 @@ class Jogo:
             if self.resgate is not None:
                 d = random.uniform(700, 1000)
             elif m.cidade_perto(p.x, p.y, 1.3):  # na cidade nasce mais perto (mas fora da tela), dentro da cidade
-                d = random.uniform(760, 1050)
+                d = random.uniform(700, 950)
             else:
                 d = random.uniform(1150, 1500)
             x = p.x + math.cos(a) * d

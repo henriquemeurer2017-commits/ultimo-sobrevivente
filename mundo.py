@@ -54,13 +54,18 @@ COR_MAPA = {
 
 class Mundo:
     def __init__(self, seed, aviso=None):
+        aviso = aviso or (lambda txt: None)
+        for txt in self.gerar(seed):
+            aviso(txt)
+
+    def gerar(self, seed):
+        """Monta o mundo em passos. A cada passo devolve um texto (assim o navegador nao trava)."""
         self.seed = seed
         rnd = random.Random(seed)
         rng = np.random.default_rng(seed)
         self.rnd = rnd
-        aviso = aviso or (lambda txt: None)
 
-        aviso("Criando o terreno, os lagos e as matas...")
+        yield ("Criando o terreno, os lagos e as matas...")
         elev = fbm(rng, N, [(80, .55), (30, .3), (11, .15)])
         yy, xx = np.mgrid[0:N, 0:N]
         borda = np.minimum(np.minimum(xx, yy), np.minimum(N - 1 - xx, N - 1 - yy))
@@ -85,7 +90,7 @@ class Mundo:
         self.vias = []
         self._t = t
 
-        aviso("Erguendo cidades e vilas abandonadas...")
+        yield ("Erguendo cidades e vilas abandonadas...")
         self.cidades = []
         nomes = NOMES_CIDADES[:]
         rnd.shuffle(nomes)
@@ -177,7 +182,7 @@ class Mundo:
         vila0 = min(vilas, key=lambda c: math.hypot(c["x"] - N / 2, c["y"] - N / 2) + rnd.uniform(0, 80))
         self.vila_inicio = vila0
 
-        aviso("Escondendo bunkers militares na floresta...")
+        yield ("Escondendo bunkers militares na floresta...")
         cabanas = 0
         for _ in range(4000):
             if cabanas >= 28:
@@ -234,7 +239,7 @@ class Mundo:
                 caixas[0]["itens"].insert(0, ["peca", 1])
                 caixas[0]["revela"] = b["indice"] + 1
 
-        aviso("Plantando arvores e capim alto...")
+        yield ("Plantando arvores e capim alto...")
         self.tn = t
         self.t = bytearray(t.tobytes())
         self.col = {}
@@ -278,7 +283,7 @@ class Mundo:
             else:
                 self.capim_p[ty * N + tx] = (x, y, rnd.randrange(12))
 
-        aviso("Abandonando carros nas estradas...")
+        yield ("Abandonando carros nas estradas...")
         vias = self.vias
         rnd.shuffle(vias)
         for (tx, ty) in vias:
@@ -306,7 +311,7 @@ class Mundo:
             self.moveis.append(dict(id=len(self.moveis), x=bx, y=by, tipo="porta_malas", aberto=False,
                                     itens=sortear(rnd, LOOT["porta_malas"], rnd.choice([0, 1, 1, 2, 2, 3]))))
 
-        aviso("Espalhando armas e suprimentos pelo chao...")
+        yield ("Espalhando armas e suprimentos pelo chao...")
         self.itens_chao = []
         tent = 0
         while len(self.itens_chao) < 1700 and tent < 40000:
@@ -347,12 +352,14 @@ class Mundo:
                     m["itens"] = [["pistola", 1], ["9mm", 12], ["agua", 1]]
                     break
 
-        aviso("Espalhando campos de capim alto...")
+        yield ("Espalhando campos de capim alto...")
         self._campos_e_zonas()
+        yield "Escondendo mochilas, armas e materiais..."
         self._mochilas_e_materiais()
 
-        aviso("Preparando o desenho...")
+        yield ("Preparando o desenho...")
         self._indexar()
+        yield "Pintando o mundo..."
         self._preparar_desenho(rng)
 
     # ---------------------------------------------------------------- geracao
@@ -584,8 +591,19 @@ class Mundo:
                 dx, dy = {"N": (0, -1), "S": (0, 1), "O": (-1, 0), "L": (1, 0)}[lado]
                 for k in (0.5, 1.5, 2.5):
                     frentes.append((px * T + 16 + dx * k * T, py * T + 16 + dy * k * T))
+        # separa as frentes das portas por quadradinho: assim cada arvore so olha as portas do lado dela
+        grade = {}
+        for fx, fy in frentes:
+            grade.setdefault((int(fx // T), int(fy // T)), []).append((fx, fy))
+
         def perto(x, y, r):
-            return any((x - fx) ** 2 + (y - fy) ** 2 < r * r for fx, fy in frentes)
+            tx, ty = int(x // T), int(y // T)
+            for gy in range(ty - 3, ty + 4):
+                for gx in range(tx - 3, tx + 4):
+                    for fx, fy in grade.get((gx, gy), ()):
+                        if (x - fx) ** 2 + (y - fy) ** 2 < r * r:
+                            return True
+            return False
         ficam = []
         for c in self.carros:
             if perto(c["x"], c["y"], 64):
