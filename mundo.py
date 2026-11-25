@@ -497,7 +497,7 @@ class Mundo:
             if porte == "grande":
                 self._aumentar_bunker(b, rnd)
             # cada bunker tem uma bancada pronta para melhorar armas e mochila
-            bx = (b["x"] + 2) * T + 18
+            bx = (b["x"] + (3 if b.get("porte") == "grande" else 2)) * T + 18
             by = (b["y"] + b["h"] // 2) * T + 16
             self.bancadas.append(dict(x=bx, y=by, bunker=b["indice"]))
             self.add_colisor(bx, by, 16)
