@@ -177,6 +177,10 @@ class Jogo:
         self.roda = 0
         self.fake = None
         self.recorde = self.ler_recorde()
+        # o modo dono agora vale so por mundo; moedas de dono nao contam fora do mundo dele
+        self.recorde.pop("dono", None)
+        if self.recorde.get("moedas", 0) >= 999999:
+            self.recorde["moedas"] = 0
         self.t_menu = 0.0
         self.fundo_menu = self.criar_fundo_menu()
         self.canal_chuva = None
@@ -560,8 +564,6 @@ class Jogo:
         self.respawn = list(m.inicio)
         self.inv = {"comida": 1, "agua": 1, "bandagem": 1}
         self.moedas = self.recorde.get("moedas", 0)
-        if self.recorde.get("dono"):
-            self.dono = True
         self.armas = ["faca"]
         self.pente = {}
         self.silen = []
@@ -581,7 +583,7 @@ class Jogo:
     def salvar(self):
         if self.mundo is None or getattr(self, "p", None) is None:
             return
-        if self.recorde.get("moedas") != self.moedas:  # moedas valem para todos os mundos
+        if not self.dono and self.recorde.get("moedas") != self.moedas:  # moedas valem para todos os mundos
             self.recorde["moedas"] = self.moedas
             self.gravar_recorde()
         m = self.mundo
@@ -642,8 +644,8 @@ class Jogo:
         self.niveis = d.get("niveis", {})
         self.miras = d.get("miras", [])
         self.reforco_mochila = d.get("reforco_mochila", 0)
-        self.moedas = self.recorde.get("moedas", d.get("moedas", 0))
-        self.dono = d.get("dono", False) or self.recorde.get("dono", False)
+        self.dono = d.get("dono", False)  # o modo dono vale so neste mundo
+        self.moedas = d.get("moedas", 0) if self.dono else self.recorde.get("moedas", d.get("moedas", 0))
         self.mochila_infinita = d.get("mochila_infinita", False)
         self.p.sangrando, self.p.perna, self.p.braco = d.get("feridas", [False, False, False])
         self.armas = d["armas"]
@@ -1115,9 +1117,7 @@ class Jogo:
     def ativar_dono(self):
         self.dono = True
         self.digitado = ""
-        self.recorde["dono"] = True
-        self.gravar_recorde()
-        self.msg("Bem-vindo, DONO! Lá em cima apareceu o lugar de escrever, e do lado do mapa o botão DONO.",
+        self.msg("Modo DONO ligado SÓ NESTE MUNDO. Lá em cima: lugar de escrever; do lado do mapa: botão DONO.",
                  (255, 160, 230))
         self.salvar()
 
@@ -1130,11 +1130,18 @@ class Jogo:
         num = int(arg) if arg.isdigit() else None
         p = self.p
         if cmd == "ajuda":
-            for linha in ("tudo  ·  moedas 1000  ·  curar  ·  noite  ·  dia  ·  dia 10 (vai para o dia 10)",
+            for linha in ("tudo  ·  moedas 1000  ·  curar  ·  noite  ·  dia  ·  dia 10  ·  desligar (volta ao normal)",
                           "gigante  ·  zumbis 5  ·  bunker 2 (te leva no bunker 2)  ·  limpar (some com os zumbis)"):
                 self.msg(linha, (255, 200, 240))
         elif cmd == "tudo":
             self.tudo_do_melhor()
+        elif cmd == "desligar":
+            self.dono = False
+            self.mochila_infinita = False
+            self.moedas = self.recorde.get("moedas", 0)
+            self.console_ativo = False
+            self.msg("Modo dono desligado neste mundo. Agora ele é um mundo normal.", (200, 230, 255))
+            self.salvar()
         elif cmd == "moedas":
             self.moedas += num or 1000
             self.msg(f"Agora você tem {self.moedas} moedas.", (255, 220, 110))
@@ -1212,9 +1219,7 @@ class Jogo:
         if not self.dono and self.digitado.upper().endswith(CODIGO_DONO):
             self.dono = True
             self.digitado = ""
-            self.recorde["dono"] = True
-            self.gravar_recorde()
-            self.msg("Bem-vindo, DONO do jogo! Clique no botão DONO para ter tudo.", (255, 160, 230))
+            self.msg("Modo DONO ligado SÓ NESTE MUNDO. Clique no botão DONO para ter tudo.", (255, 160, 230))
             self.salvar()
         self.desenhar()
         tela = self.tela
@@ -2666,8 +2671,9 @@ class Jogo:
 
     def vencer(self):
         self.estado = "vitoria"
-        self.moedas += MOEDAS_ZERAR
-        self.recorde["moedas"] = self.moedas
+        if not self.dono:  # mundo com codigo nao ganha moedas
+            self.moedas += MOEDAS_ZERAR
+            self.recorde["moedas"] = self.moedas
         self.recorde["resgates"] = self.recorde.get("resgates", 0) + 1
         self.recorde["dias"] = max(self.recorde.get("dias", 0), self.dia)
         self.recorde["zumbis"] = max(self.recorde.get("zumbis", 0), self.mortes)
@@ -2683,7 +2689,8 @@ class Jogo:
         self.texto(f"Sobreviveu {self.dia} dias e derrubou {self.mortes} zumbis.", (W // 2, 280), self.f_med2, centro=True)
         self.texto("O helicóptero levou você para a zona segura. Parabéns, sobrevivente.", (W // 2, 320), self.f_med2,
                    centro=True)
-        self.texto(f"+{MOEDAS_ZERAR} MOEDAS por zerar o jogo!  (agora você tem {self.moedas})", (W // 2, 366),
+        self.texto("Mundo com código de dono: não ganha moedas." if self.dono else
+                   f"+{MOEDAS_ZERAR} MOEDAS por zerar o jogo!  (agora você tem {self.moedas})", (W // 2, 366),
                    self.f_med, (255, 220, 110), centro=True)
         if self.botao("Menu", W // 2, 420):
             self.mundo = None
@@ -2882,7 +2889,7 @@ class Jogo:
             pygame.draw.rect(s, (210, 30, 30), (cx - rr * 3 // 4, cy - rr // 4, rr * 3 // 2, rr // 2))
             if b["tipo"] == "hospital":
                 txt = self.f_med.render("HOSPITAL", True, (180, 30, 30))
-                s.blit(txt, txt.get_rect(center=(cx, h - 20)))
+                s.blit(txt, txt.get_rect(center=(max(60, cx - rr - 62), cy)))
             pygame.draw.rect(s, (150, 152, 148), (0, 0, w, h), 5)
             for _ in range(10):
                 pygame.draw.circle(s, (150, 140, 120), (r.randint(0, w), r.randint(0, h)), r.randint(3, 9))
@@ -2902,12 +2909,12 @@ class Jogo:
             s.blit(txt, txt.get_rect(center=(w // 2, h // 2 + 56)))
             pygame.draw.rect(s, (50, 56, 40), (0, 0, w, h), 5)
         G.vivo(s, 1.2, 1.05)
-        for px, py in (b.get("portas", []) if b["tipo"] in ("casa", "militar") else []):
+        for px, py in (b.get("portas", []) if b["tipo"] in ("casa", "militar", "hospital", "posto") else []):
             lx = (px - b["x"]) * T
             ly = (py - b["y"]) * T
             pygame.draw.rect(s, (26, 24, 22), (lx, ly, T, T))
             pygame.draw.rect(s, (200, 170, 90), (lx, ly, T, T), 2)
-        if b["tipo"] == "militar":
+        if b["tipo"] in ("militar", "hospital", "posto"):
             fonte = self.f_peq
             vistos = set()
             for px, py in b.get("portas", []):
@@ -2919,7 +2926,8 @@ class Jogo:
                 ly = (py - b["y"]) * T + T // 2
                 dy = {"N": 30, "S": -30, "O": 0, "L": 0}[lado]
                 dx = {"O": 60, "L": -60, "N": 0, "S": 0}[lado]
-                img = fonte.render("ENTRADA", True, (255, 220, 120))
+                claro = b["tipo"] in ("hospital", "posto")  # telhado branco: letra escura
+                img = fonte.render("ENTRADA", True, (170, 30, 30) if claro else (255, 220, 120))
                 s.blit(img, img.get_rect(center=(lx + dx, ly + dy)))
         self.telhados[b["id"]] = s
         return s

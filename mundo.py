@@ -502,6 +502,8 @@ class Mundo:
             self.bancadas.append(dict(x=bx, y=by, bunker=b["indice"]))
             self.add_colisor(bx, by, 16)
 
+        self._liberar_portas()
+
         # pilhas de tabuas e sucata nas cidades e vilas, e mochilas pelo chao
         def solta(item, q, cx, cy, raio):
             for _ in range(30):
@@ -572,6 +574,38 @@ class Mundo:
                                     predio=b, itens=sortear(rnd, LOOT["militar"], rnd.randint(3, 5))))
         for bx in (x + w - 4, x + w - 2):
             self.camas.append(dict(x=bx * T + 16, y=(y + 1) * T + 28, hospital=False, bunker=b["id"]))
+
+    def _liberar_portas(self):
+        """Tira carros e arvores que ficaram bloqueando a porta de algum predio."""
+        frentes = []
+        for b in self.construcoes:
+            for px, py in b.get("portas", []):
+                lado = "N" if py == b["y"] else "S" if py == b["y"] + b["h"] - 1 else "O" if px == b["x"] else "L"
+                dx, dy = {"N": (0, -1), "S": (0, 1), "O": (-1, 0), "L": (1, 0)}[lado]
+                for k in (0.5, 1.5, 2.5):
+                    frentes.append((px * T + 16 + dx * k * T, py * T + 16 + dy * k * T))
+        def perto(x, y, r):
+            return any((x - fx) ** 2 + (y - fy) ** 2 < r * r for fx, fy in frentes)
+        ficam = []
+        for c in self.carros:
+            if perto(c["x"], c["y"], 64):
+                a = math.radians(c["ang"])
+                for k in (-16, 0, 16):
+                    qx, qy = c["x"] + math.cos(a) * k, c["y"] - math.sin(a) * k
+                    i = int(qy // T) * N + int(qx // T)
+                    self.col[i] = [q for q in self.col.get(i, []) if abs(q[0] - qx) > 0.01 or abs(q[1] - qy) > 0.01]
+                tx, ty = c["x"] - math.cos(a) * 36, c["y"] + math.sin(a) * 36
+                for mv in self.moveis:
+                    if mv["tipo"] == "porta_malas" and abs(mv["x"] - tx) < 1 and abs(mv["y"] - ty) < 1:
+                        mv["aberto"] = True
+                        mv["itens"] = []
+            else:
+                ficam.append(c)
+        self.carros = ficam
+        for i, a in list(self.arvores.items()):
+            if perto(a[0], a[1], 40):
+                self.arvores.pop(i)
+                self.col[i] = [q for q in self.col.get(i, []) if abs(q[0] - a[0]) > 0.01 or abs(q[1] - a[1]) > 0.01]
 
     def densidade(self, x, y):
         tx = min(N - 1, max(0, int(x // T)))
