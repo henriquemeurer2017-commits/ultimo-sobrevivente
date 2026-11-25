@@ -21,6 +21,7 @@ import time
 from collections import OrderedDict
 
 TESTE = "--teste" in sys.argv
+NAVEGADOR = sys.platform == "emscripten"
 if TESTE:
     os.environ["SDL_VIDEODRIVER"] = "dummy"
     os.environ["SDL_AUDIODRIVER"] = "dummy"
@@ -189,7 +190,8 @@ class Jogo:
 
     def passo(self):
         """Um quadro do jogo (a versao de navegador chama isto a cada quadro)."""
-        dt = min(self.relogio.tick(FPS) / 1000.0, 0.05)
+        # no navegador quem segura a velocidade e o proprio navegador; aqui so mede o tempo
+        dt = min(self.relogio.tick(0 if NAVEGADOR else FPS) / 1000.0, 0.05)
         self.eventos()
         getattr(self, "tela_" + self.estado)(dt)
         pygame.display.flip()
@@ -2390,7 +2392,8 @@ class Jogo:
             tela.blit(camada, (0, 0))
         # luz e escuridao
         self.desenhar_luz(camx, camy, psx, psy)
-        tela.blit(self.vinheta, (0, 0))
+        if not NAVEGADOR:  # a sombra das bordas pesa no navegador
+            tela.blit(self.vinheta, (0, 0))
         if self.dano_t > 0:
             self.vinheta_v.set_alpha(int(255 * self.dano_t / 0.45))
             tela.blit(self.vinheta_v, (0, 0))
