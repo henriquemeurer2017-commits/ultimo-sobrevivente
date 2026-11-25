@@ -463,7 +463,7 @@ class Jogo:
         self.texto("COMO JOGAR", (W // 2, 60), self.f_grande, centro=True)
         linhas = [
             "W A S D: andar   ·   SHIFT: correr   ·   Mouse: mirar   ·   Botão esquerdo: atacar/atirar",
-            "Botão direito: mirar com calma   ·   R: recarregar   ·   1 a 6: trocar de arma   ·   ESPAÇO: esquiva rápida",
+            "Botão direito: mirar   ·   R: recarregar   ·   1 a 0: armas   ·   ESPAÇO: esquiva   ·   C: agachar",
             "E: revistar armários, carros e caixas  ·  beber água no lago  ·  dormir  ·  cortar árvore (com machado)",
             "F: comer   ·   G: beber água   ·   H: bandagem   ·   J: kit médico",
             "B: construir (BANCADA melhora armas)  ·  L: lanterna  ·  M: mapa  ·  V: MOCHILA  ·  K: LOJA",
@@ -515,6 +515,9 @@ class Jogo:
         self.acao = None
         self.t_spawn = 0.0
         self.na_calma = False
+        self.agachado = False
+        self.console_ativo = False
+        self.console_txt = ""
         self.moedas = 0
         self.dono = False
         self.mochila_infinita = False
@@ -843,7 +846,7 @@ class Jogo:
         rb = getattr(self, "rect_botao_mochila", None)
         if rb and rb.collidepoint(pos):
             return True
-        for nome in ("rect_botao_loja", "rect_botao_dono"):
+        for nome in ("rect_botao_loja", "rect_botao_dono", "rect_console"):
             rr = getattr(self, nome, None)
             if rr and rr.collidepoint(pos):
                 return True
@@ -863,6 +866,10 @@ class Jogo:
         rd = getattr(self, "rect_botao_dono", None)
         if rd and rd.collidepoint(pos):
             self.tudo_do_melhor()
+            return True
+        rc = getattr(self, "rect_console", None)
+        if rc and rc.collidepoint(pos):
+            self.console_ativo = True
             return True
         for r, it in getattr(self, "rects_rapidos", ()):
             if r.collidepoint(pos):
@@ -1097,6 +1104,59 @@ class Jogo:
         return s
 
     # ================================================================ loja e modo dono
+    def comando_dono(self, txt):
+        """Comandos que so o dono pode escrever."""
+        partes = txt.strip().lower().split()
+        if not partes or not self.dono:
+            return
+        cmd, arg = partes[0], (partes[1] if len(partes) > 1 else "")
+        num = int(arg) if arg.isdigit() else None
+        p = self.p
+        if cmd == "ajuda":
+            for linha in ("tudo  ·  moedas 1000  ·  curar  ·  noite  ·  dia  ·  dia 10 (vai para o dia 10)",
+                          "gigante  ·  zumbis 5  ·  bunker 2 (te leva no bunker 2)  ·  limpar (some com os zumbis)"):
+                self.msg(linha, (255, 200, 240))
+        elif cmd == "tudo":
+            self.tudo_do_melhor()
+        elif cmd == "moedas":
+            self.moedas += num or 1000
+            self.msg(f"Agora você tem {self.moedas} moedas.", (255, 220, 110))
+        elif cmd == "curar":
+            p.vida, p.fome, p.sede, p.folego = 100, 100, 100, 100
+            p.curar_tudo()
+            self.msg("Curado: vida, fome e sede cheias.", (160, 255, 160))
+        elif cmd == "noite":
+            self.hora = 22.0
+        elif cmd == "dia" and num:
+            self.dia = num
+            self.msg(f"Agora é o dia {num}.", (255, 220, 160))
+        elif cmd == "dia":
+            self.hora = 9.0
+        elif cmd in ("gigante", "zumbis"):
+            tipo = "gigante" if cmd == "gigante" else None
+            for k in range(1 if tipo else min(num or 5, 30)):
+                a = random.uniform(0, 6.283)
+                x, y = p.x + math.cos(a) * 420, p.y + math.sin(a) * 420
+                t = tipo or random.choice(["normal", "normal", "gordo", "corredor"])
+                self.zumbis.append(Zumbi(x, y, t, random.randrange(len(self.spr_z[t])), random))
+            self.msg("Lá vem eles!", (255, 150, 130))
+        elif cmd == "limpar":
+            self.zumbis = []
+            self.msg("Sumiu todo mundo.", (200, 230, 255))
+        elif cmd == "bunker" and num and 1 <= num <= len(self.mundo.bunkers):
+            b = self.mundo.bunkers[num - 1]
+            px, py = b["portas"][-1]
+            lado = 1 if py == b["y"] + b["h"] - 1 else (-1 if py == b["y"] else 0)
+            p.x, p.y = px * T + 16, (py + lado * 2) * T + 16
+            if not lado:
+                p.x += 64 if px == b["x"] + b["w"] - 1 else -64
+            if num - 1 not in self.revelados:
+                self.revelados.append(num - 1)
+            self.cam = [p.x, p.y]
+            self.msg(f"Você foi para o bunker {num}.", (200, 255, 200))
+        else:
+            self.msg(f"Não conheço o comando \"{txt}\". Escreva: ajuda", (255, 170, 150))
+
     def tudo_do_melhor(self):
         """Botao do dono: mochila infinita e tudo do melhor."""
         self.dono = True
@@ -1417,6 +1477,8 @@ class Jogo:
         if self.fake is not None:
             f = self.fake
             return f["mv"], f["corre"], f["mira"], f["tiro"], f["mouse"]
+        if self.console_ativo:
+            return (0, 0), False, False, False, pygame.mouse.get_pos()
         k = pygame.key.get_pressed()
         mx = (k[pygame.K_d] or k[pygame.K_RIGHT]) - (k[pygame.K_a] or k[pygame.K_LEFT])
         my = (k[pygame.K_s] or k[pygame.K_DOWN]) - (k[pygame.K_w] or k[pygame.K_UP])
@@ -1435,6 +1497,30 @@ class Jogo:
 
     def teclas_jogo(self):
         tc = self.teclas
+        if self.console_ativo:
+            if pygame.K_ESCAPE in tc:
+                self.console_ativo = False
+            elif pygame.K_RETURN in tc:
+                self.comando_dono(self.console_txt)
+                self.console_txt = ""
+                self.console_ativo = False
+            elif pygame.K_BACKSPACE in tc:
+                self.console_txt = self.console_txt[:-1]
+            elif self.letras:
+                self.console_txt = (self.console_txt + self.letras)[:40]
+            return
+        if not self.dono and self.digitado.upper().endswith(CODIGO_DONO):
+            self.dono = True
+            self.digitado = ""
+            self.recorde["dono"] = True
+            self.gravar_recorde()
+            self.msg("Bem-vindo, DONO! Lá em cima apareceu o lugar de escrever, e do lado do mapa o botão DONO.",
+                     (255, 160, 230))
+            self.salvar()
+        if pygame.K_c in tc:
+            self.agachado = not self.agachado
+            self.msg("Agachado: anda devagar, sem barulho, e os zumbis te veem menos." if self.agachado else "Levantou.",
+                     (170, 220, 255))
         if pygame.K_ESCAPE in tc or pygame.K_p in tc:
             if self.modo_construir:
                 self.modo_construir = None
@@ -1978,6 +2064,9 @@ class Jogo:
             self.adrenalina -= dt
             vel *= 1.35
             p.folego = 100
+        if self.agachado:
+            vel = min(vel, 128) * 0.5
+            correndo = False
         if p.perna:
             vel = min(vel, 128) * 0.62
             correndo = False
@@ -2286,6 +2375,8 @@ class Jogo:
             visao *= 0.8
         if m.no_capim(p.x, p.y):
             visao *= 0.35
+        if self.agachado:
+            visao *= 0.55
         zonas = list(self.zonas_seguras())
         self.arames = [c for c in self.construidos if c["tipo"] == "arame"]
         remover = []
@@ -2903,7 +2994,14 @@ class Jogo:
         psx = p.x - camx
         psy = p.y - camy
         tela.blit(self.spr_sombra, (psx - self.spr_sombra.get_width() / 2 + 4, psy - self.spr_sombra.get_height() / 2 + 6))
-        spr = self.rot(("j", self.arma), self.spr_j[self.arma], math.degrees(p.ang), 4)
+        if self.agachado:
+            agach = self.__dict__.setdefault("spr_agachado", {})
+            if self.arma not in agach:
+                b = self.spr_j[self.arma]
+                agach[self.arma] = pygame.transform.smoothscale(b, (int(b.get_width() * 0.82), int(b.get_height() * 0.82)))
+            spr = self.rot(("ja", self.arma), agach[self.arma], math.degrees(p.ang), 4)
+        else:
+            spr = self.rot(("j", self.arma), self.spr_j[self.arma], math.degrees(p.ang), 4)
         tela.blit(spr, (psx - spr.get_width() / 2, psy - spr.get_height() / 2))
         for c in self.construidos:
             if c["tipo"] == "barricada" and vis.collidepoint(c["x"], c["y"]):
@@ -3185,7 +3283,7 @@ class Jogo:
                         1.5)
         self.texto("V", (rb.x + 5, rb.y + 1), self.f_peq, (200, 200, 200), sombra=False)
         mouse = pygame.mouse.get_pos()
-        rl = pygame.Rect(rb.right + 166, H - 136, 60, 58)
+        rl = pygame.Rect(W - 290, 14, 64, 58)  # do lado do mapa
         self.rect_botao_loja = rl
         self.painel(rl, 220 if rl.collidepoint(mouse) else 170)
         pygame.draw.rect(tela, (230, 190, 90) if rl.collidepoint(mouse) else (150, 120, 60), rl, 2, border_radius=12)
@@ -3195,12 +3293,28 @@ class Jogo:
         self.texto("K", (rl.x + 5, rl.y + 1), self.f_peq, (200, 200, 200), sombra=False)
         self.rect_botao_dono = None
         if self.dono:
-            rd = pygame.Rect(rl.right + 8, H - 136, 60, 58)
+            rd = pygame.Rect(W - 290, 80, 64, 58)
             self.rect_botao_dono = rd
             self.painel(rd, 220 if rd.collidepoint(mouse) else 170)
             pygame.draw.rect(tela, (255, 120, 220) if rd.collidepoint(mouse) else (170, 80, 150), rd, 2, border_radius=12)
             G.desenha_icone(tela, "mochila4", rd.centerx, rd.y + 22, 1.0)
             self.texto("DONO", (rd.centerx, rd.y + 45), self.f_peq, (255, 160, 230), centro=True)
+        self.rect_console = None
+        if self.dono:
+            rc = pygame.Rect(494, 14, 490, 36)
+            self.rect_console = rc
+            ativo = self.console_ativo
+            pygame.draw.rect(tela, (24, 16, 26) if ativo else (16, 14, 18), rc, border_radius=8)
+            pygame.draw.rect(tela, (255, 140, 220) if ativo else (140, 80, 130), rc, 2, border_radius=8)
+            if self.console_txt or ativo:
+                pisca = "|" if ativo and int(time.time() * 2) % 2 == 0 else ""
+                self.texto("> " + self.console_txt + pisca, (rc.x + 10, rc.y + 7), self.f_med2, (255, 220, 245))
+            else:
+                self.texto("Escrever (só o dono)  ·  clique aqui e digite: ajuda", (rc.x + 10, rc.y + 8), self.f_peq,
+                           (170, 120, 160))
+        if self.agachado:
+            self.texto("AGACHADO  (C levanta)", (24, H - 160 - 24 * (p.sangrando + p.perna + p.braco)), self.f_med,
+                       (170, 220, 255))
         fr = min(1, uso / cap)
         pygame.draw.rect(tela, (30, 30, 34), (rb.right + 8, H - 98, 150, 8), border_radius=4)
         pygame.draw.rect(tela, (230, 90, 70) if fr > 0.95 else (200, 180, 120), (rb.right + 8, H - 98, int(150 * fr), 8),
