@@ -382,6 +382,7 @@ class Mundo:
         self._campos_e_zonas()
         yield "Escondendo mochilas, armas e materiais..."
         self._mochilas_e_materiais()
+        self._escadas()
 
         yield ("Preparando o desenho...")
         self._indexar()
@@ -670,6 +671,31 @@ class Mundo:
             if perto(a[0], a[1], 40):
                 self.arvores.pop(i)
                 self.col[i] = [q for q in self.col.get(i, []) if abs(q[0] - a[0]) > 0.01 or abs(q[1] - a[1]) > 0.01]
+
+    def _escadas(self):
+        """Escada encostada na parede de muitas casas, mercados e postos: da para subir no telhado."""
+        rnd = random.Random(self.seed + 7373)
+        for b in self.construcoes:
+            if b["tipo"] not in ("casa", "mercado", "gas", "hospital", "posto", "shopping"):
+                continue
+            x, y, w, h = b["x"], b["y"], b["w"], b["h"]
+            lados_porta = set()
+            for px, py in b.get("portas", []):
+                lados_porta.add("N" if py == y else "S" if py == y + h - 1 else "O" if px == x else "L")
+            opcoes = [l for l in "NSLO" if l not in lados_porta]
+            rnd.shuffle(opcoes)
+            for lado in opcoes:
+                if lado == "N":
+                    fora, dentro = ((x + w / 2) * T, y * T - 14), ((x + w / 2) * T, y * T + 26)
+                elif lado == "S":
+                    fora, dentro = ((x + w / 2) * T, (y + h) * T + 14), ((x + w / 2) * T, (y + h) * T - 26)
+                elif lado == "O":
+                    fora, dentro = (x * T - 14, (y + h / 2) * T), (x * T + 26, (y + h / 2) * T)
+                else:
+                    fora, dentro = ((x + w) * T + 14, (y + h / 2) * T), ((x + w) * T - 26, (y + h / 2) * T)
+                if not self.bloqueado(fora[0], fora[1], 12) and self.tile_px(*fora) not in (AGUA, PONTE):
+                    b["escada"] = dict(lado=lado, fora=fora, dentro=dentro)
+                    break
 
     def densidade(self, x, y):
         tx = min(N - 1, max(0, int(x // T)))

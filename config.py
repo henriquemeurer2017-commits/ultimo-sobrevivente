@@ -124,6 +124,14 @@ LOJA_PACOTES = [("Munição de AK-47 x120", {"556": 120}, 25), ("Cartuchos x40",
                 ("Kit médico x3", {"kit": 3}, 30)]
 CODIGO_DONO = "DONO"
 MOEDAS_ZERAR = 6          # moedas ganhas cada vez que zera o jogo (resgate)
+# bancada: coisas para fabricar (id, nome, explicacao, custo)
+FABRICAR = [
+    ("colete", "Colete de sucata", "Você leva quase metade do dano dos zumbis.", {"sucata": 12, "ferramentas": 2}),
+    ("capacete", "Capacete", "Bem menos chance de sangrar ou quebrar osso.", {"sucata": 6, "ferramentas": 1}),
+    ("flechas", "10 flechas", "Munição da besta.", {"tabua": 2, "sucata": 1}),
+]
+# o que da para construir na base direto da bancada
+BASE_BANCADA = ["muro", "portao", "bau", "arame", "barricada", "fogueira", "abrigo"]
 # bancada: nivel maximo das melhorias
 NIVEL_MAX = 3
 MOCHILA_EXTRA = 40      # espaco a mais por nivel de reforco da mochila

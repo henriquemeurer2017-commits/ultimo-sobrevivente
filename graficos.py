@@ -696,6 +696,32 @@ def sprite_bau():
     return s
 
 
+def sprite_escada():
+    """Escada de pe, encostada (vista de cima, comprida na vertical)."""
+    s = pygame.Surface((20, 46), pygame.SRCALPHA)
+    for x in (3, 15):
+        pygame.draw.rect(s, (70, 48, 28), (x - 1, 0, 4, 46))
+        pygame.draw.rect(s, (150, 104, 58), (x, 0, 2, 46))
+    for y in range(4, 44, 7):
+        pygame.draw.rect(s, (70, 48, 28), (3, y - 1, 14, 4))
+        pygame.draw.rect(s, (170, 122, 70), (3, y, 14, 2))
+    return s
+
+
+def luneta_mascara(raio):
+    """Tela preta com um buraco redondo e a cruz da mira (visao pela luneta)."""
+    s = pygame.Surface((raio * 2 + 2 * 1400, raio * 2 + 2 * 800), pygame.SRCALPHA)
+    s.fill((0, 0, 0, 255))
+    cx, cy = s.get_width() // 2, s.get_height() // 2
+    pygame.draw.circle(s, (0, 0, 0, 0), (cx, cy), raio)
+    pygame.draw.circle(s, (10, 10, 10, 255), (cx, cy), raio, 10)
+    for d in (-1, 1):
+        pygame.draw.line(s, (10, 10, 10, 230), (cx + d * 18, cy), (cx + d * raio, cy), 2)
+        pygame.draw.line(s, (10, 10, 10, 230), (cx, cy + d * 18), (cx, cy + d * raio), 2)
+    pygame.draw.circle(s, (220, 30, 30, 255), (cx, cy), 3)
+    return s
+
+
 def sprite_fogueira():
     s = pygame.Surface((40, 40), pygame.SRCALPHA)
     for i in range(10):
