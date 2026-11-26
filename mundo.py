@@ -510,6 +510,14 @@ class Mundo:
             self.add_colisor(bx, by, 16)
 
         self._liberar_portas()
+        # mochilas extras (sorteio separado, para nao mudar o resto do mundo)
+        rx = random.Random(self.seed + 6161)
+        for mv in casa:
+            if rx.random() < 0.18:
+                mv["itens"].append([rx.choice(["mochila1", "mochila2", "mochila2", "mochila3"]), 1])
+        for mv in malas:
+            if rx.random() < 0.15:
+                mv["itens"].append([rx.choice(["mochila2", "mochila3"]), 1])
 
         # pilhas de tabuas e sucata nas cidades e vilas, e mochilas pelo chao
         def solta(item, q, cx, cy, raio):

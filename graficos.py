@@ -258,7 +258,13 @@ def _boneco(corpo, pele, cabelo, arma=None, zumbi=False, rnd=None, ombro=13):
             pygame.draw.line(s, pele, (c, y), (c + 20, y + lado * -2), 5)
             pygame.draw.circle(s, tom(pele, -10), (c + 21, y + lado * -2), 3)
     else:
-        if arma in ("faca", "machado", "facao", "katana"):
+        if arma == "maos":  # sem nada na mao: bracos soltos do lado do corpo
+            for lado in (-1, 1):
+                y = c + lado * (ombro - 2)
+                pygame.draw.line(s, tom(pele, -25), (c, y), (c + 9, y + lado * 2), 6)
+                pygame.draw.line(s, pele, (c, y), (c + 8, y + lado * 2), 4)
+                pygame.draw.circle(s, pele, (c + 10, y + lado * 2), 3)
+        elif arma in ("faca", "machado", "facao", "katana"):
             pygame.draw.line(s, tom(pele, -25), (c, c + ombro - 3), (c + 14, c + ombro - 6), 6)
             pygame.draw.line(s, pele, (c, c + ombro - 3), (c + 13, c + ombro - 6), 4)
             pygame.draw.line(s, tom(pele, -25), (c, c - ombro + 3), (c + 6, c - ombro + 7), 6)
@@ -449,6 +455,9 @@ def _desenha_icone_bruto(s, item, x, y, k=1.0):
         pygame.draw.circle(s, (120, 200, 255), (x + int(9 * k), y), max(2, int(3 * k)))
         pygame.draw.rect(s, (60, 64, 72), R(-4, 3, 3, 4))
         pygame.draw.rect(s, (60, 64, 72), R(3, 3, 3, 4))
+    elif item == "maos":
+        pygame.draw.circle(s, (214, 168, 128), (x, y), max(3, int(6 * k)))
+        pygame.draw.circle(s, (170, 128, 96), (x, y), max(3, int(6 * k)), 1)
     elif item == "seringa":
         pygame.draw.line(s, (200, 200, 210), (x - 11 * k, y + 8 * k), (x + 6 * k, y - 9 * k), max(1, int(6 * k)))
         pygame.draw.line(s, (240, 60, 70), (x - 8 * k, y + 5 * k), (x + 3 * k, y - 6 * k), max(1, int(3 * k)))
@@ -558,6 +567,44 @@ def sprite_bancada():
     pygame.draw.rect(s, (110, 114, 124), (49, 17, 8, 7))
     pygame.draw.circle(s, (180, 184, 194), (28, 24), 3)        # parafusos
     pygame.draw.circle(s, (180, 184, 194), (36, 26), 2)
+    return s
+
+
+def sprite_muro():
+    s = pygame.Surface((100, 22), pygame.SRCALPHA)
+    pygame.draw.rect(s, (60, 46, 34), (0, 2, 100, 18), border_radius=3)
+    for i in range(6):
+        pygame.draw.rect(s, (128, 96, 62), (2 + i * 16, 4, 14, 14), border_radius=2)
+        pygame.draw.line(s, (90, 66, 42), (4 + i * 16, 8), (14 + i * 16, 8), 1)
+    pygame.draw.rect(s, (120, 124, 134), (0, 9, 100, 3))
+    for x in (8, 50, 92):
+        pygame.draw.circle(s, (170, 174, 184), (x, 10), 2)
+    return s
+
+
+def sprite_portao(aberto=False):
+    s = pygame.Surface((100, 22), pygame.SRCALPHA)
+    if aberto:  # aberto: so os postes
+        for x in (0, 90):
+            pygame.draw.rect(s, (70, 52, 36), (x, 0, 10, 22), border_radius=2)
+        return s
+    for x in (0, 90):
+        pygame.draw.rect(s, (70, 52, 36), (x, 0, 10, 22), border_radius=2)
+    pygame.draw.rect(s, (150, 110, 66), (10, 4, 80, 14))
+    for x in range(12, 90, 10):
+        pygame.draw.line(s, (110, 80, 50), (x, 4), (x, 17), 1)
+    pygame.draw.rect(s, (110, 114, 124), (10, 6, 80, 2))
+    pygame.draw.rect(s, (110, 114, 124), (10, 14, 80, 2))
+    pygame.draw.circle(s, (220, 200, 90), (50, 11), 3)
+    return s
+
+
+def sprite_bau():
+    s = pygame.Surface((40, 30), pygame.SRCALPHA)
+    pygame.draw.rect(s, (70, 48, 28), (2, 4, 36, 24), border_radius=4)
+    pygame.draw.rect(s, (146, 100, 56), (4, 6, 32, 20), border_radius=3)
+    pygame.draw.rect(s, (110, 74, 40), (4, 12, 32, 3))
+    pygame.draw.rect(s, (200, 170, 80), (17, 11, 6, 7), border_radius=1)
     return s
 
 

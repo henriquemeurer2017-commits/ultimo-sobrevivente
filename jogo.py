@@ -154,6 +154,10 @@ class Jogo:
         self.spr_fogueira = G.sprite_fogueira()
         self.spr_abrigo = G.sprite_abrigo()
         self.spr_bancada = G.sprite_bancada()
+        self.spr_muro = G.sprite_muro()
+        self.spr_portao = G.sprite_portao(False)
+        self.spr_portao_aberto = G.sprite_portao(True)
+        self.spr_bau = G.sprite_bau()
         self.spr_arame = G.sprite_arame()
         self.spr_ponte = G.sprite_ponte()
         self.spr_torre = G.sprite_torre()
@@ -646,7 +650,7 @@ class Jogo:
         self.texto("COMO JOGAR", (W // 2, 60), self.f_grande, centro=True)
         linhas = [
             "W A S D: andar   ·   SHIFT: correr   ·   Mouse: mirar   ·   Botão esquerdo: atacar/atirar",
-            "Botão direito: mirar   ·   R: recarregar   ·   1 a 0: armas   ·   ESPAÇO: esquiva   ·   C: agachar",
+            "Botão direito: mirar  ·  R: recarregar  ·  1 a 0: armas  ·  Q: guardar a arma  ·  ESPAÇO: esquiva  ·  C: agachar",
             "E: revistar armários, carros e caixas  ·  beber água no lago  ·  dormir  ·  cortar árvore (com machado)",
             "F: comer   ·   G: beber água   ·   H: bandagem   ·   J: kit médico",
             "B: construir (BANCADA melhora armas)  ·  L: lanterna  ·  M: mapa  ·  V: MOCHILA  ·  K: LOJA",
@@ -1274,24 +1278,65 @@ class Jogo:
             else:
                 self.texto("?", (r.centerx, r.centery), self.f_med, (90, 90, 90), centro=True)
         # construir
-        yc = 598
-        self.texto("CONSTRUIR", (450, yc - 4), self.f_med, (255, 220, 140))
+        yc = 592
+        self.texto("CONSTRUIR  (passe o mouse para ver o preço)", (450, yc - 4), self.f_med, (255, 220, 140))
         curto = {"tabua": "tábuas", "sucata": "sucata", "ferramentas": "ferram."}
+        nomes_curtos = {"abrigo": "Bunker", "arame": "Arame", "ponte": "Ponte"}
+        mouse = pygame.mouse.get_pos()
+        dica = None
         for i, rec in enumerate(RECEITAS):
             pode = all(self.inv.get(k, 0) >= q for k, q in rec["custo"].items())
-            partes = [f"{q} {curto.get(k, k)}" for k, q in rec["custo"].items()]
-            r = pygame.Rect(450 + i * 133, yc + 22, 128, 36)
-            linhas = [", ".join(partes)] if len(partes) < 3 else [", ".join(partes[:2]), partes[2]]
-            for k, txt in enumerate(linhas):
-                self.texto(txt, (r.centerx, r.bottom + 11 + k * 16), self.f_peq,
-                           (200, 195, 180) if pode else (150, 140, 140), centro=True, sombra=False)
-            if self.botao_peq(rec["nome"], r, (40, 60, 40), pode):
+            r = pygame.Rect(450 + (i % 5) * 158, yc + 22 + (i // 5) * 38, 152, 33)
+            if r.collidepoint(mouse):
+                dica = (rec["nome"] + ": " + ", ".join(f"{q} {curto.get(k, k)}" for k, q in rec["custo"].items()), pode)
+            if self.botao_peq(nomes_curtos.get(rec["id"], rec["nome"]), r, (40, 60, 40), pode):
                 self.estado = "jogo"
                 self.modo_construir = i
                 self.msg("Clique no chão para colocar. B ou ESC cancela.", (200, 230, 255))
                 return
+        if dica:
+            self.texto(dica[0], (450, 128), self.f_peq, (200, 230, 180) if dica[1] else (230, 160, 150))
         if self.botao_peq("Fechar (V)", pygame.Rect(1130, 40, 104, 36)):
             self.estado = "jogo"
+
+    # ================================================================ bau da base
+    def tela_bau(self, dt):
+        tc = self.teclas
+        bau = self.__dict__.get("bau_atual")
+        if bau is None or pygame.K_ESCAPE in tc or pygame.K_e in tc:
+            self.estado = "jogo"
+            return
+        self.desenhar()
+        tela = self.tela
+        sh = pygame.Surface((W, H), pygame.SRCALPHA)
+        sh.fill((0, 0, 0, 180))
+        tela.blit(sh, (0, 0))
+        guardar = [k for k in ITENS if k in ESPACO and self.inv.get(k, 0) > 0]
+        dentro = [k for k in ITENS if bau["itens"].get(k, 0) > 0]
+        for lado, (titulo, lista, x0) in enumerate((("SUA MOCHILA", guardar, 60), ("BAÚ DA BASE", dentro, 660))):
+            caixa = pygame.Rect(x0, 30, 560, 620)
+            self.painel(caixa, 225)
+            self.texto(titulo, (x0 + 20, 42), self.f_grande, (255, 220, 140))
+            if not lista:
+                self.texto("vazio", (x0 + 24, 110), self.f_med2, (160, 150, 140))
+            for i, it in enumerate(lista[:16]):
+                r = pygame.Rect(x0 + 16, 96 + i * 34, 528, 30)
+                pygame.draw.rect(tela, (34, 36, 40), r, border_radius=6)
+                G.desenha_icone(tela, it, r.x + 18, r.centery, 0.9)
+                q = self.inv.get(it, 0) if lado == 0 else bau["itens"][it]
+                self.texto(f"{ITENS[it]}   x{q}", (r.x + 40, r.y + 5), self.f_peq)
+                if lado == 0:
+                    if self.botao_peq("Guardar", pygame.Rect(r.right - 96, r.y + 2, 90, 26), (40, 60, 40)):
+                        bau["itens"][it] = bau["itens"].get(it, 0) + self.inv[it]
+                        self.inv[it] = 0
+                else:
+                    if self.botao_peq("Pegar", pygame.Rect(r.right - 96, r.y + 2, 90, 26), (40, 60, 40)):
+                        sobra = self.dar(it, bau["itens"][it], avisar=False) or 0
+                        bau["itens"][it] = sobra
+                        if sobra:
+                            self.msg("Mochila cheia: o resto ficou no baú.", (255, 170, 120))
+        self.texto("O baú fica na sua base: guarde aqui o que não cabe na mochila.  (E ou ESC fecha)",
+                   (W // 2, 672), self.f_peq, (200, 195, 180), centro=True)
 
     def estacao(self):
         return ((self.dia - 1) // DIAS_ESTACAO) % len(ESTACOES)
@@ -1383,6 +1428,8 @@ class Jogo:
         self.nivel_mochila = len(MOCHILAS) - 1
         self.reforco_mochila = NIVEL_MAX
         for a in ARMAS:
+            if a.get("escondida"):
+                continue
             if a["id"] not in self.armas:
                 self.armas.append(a["id"])
             self.niveis[a["id"]] = NIVEL_MAX
@@ -1627,6 +1674,9 @@ class Jogo:
             m.add_colisor(x, y, 13)
         elif tipo == "bancada":
             m.add_colisor(x, y, 16)
+        elif tipo in ("muro", "portao", "bau"):
+            for px, py in self.pontos_colisor(c):
+                m.add_colisor(px, py, 11 if tipo != "bau" else 14)
         elif tipo == "abrigo":
             m.add_colisor(x, y, 12)
         elif tipo == "ponte":
@@ -1649,9 +1699,28 @@ class Jogo:
         if c["tipo"] == "barricada":
             a = math.radians(c.get("ang", 0))
             return [(x + math.cos(a) * k, y + math.sin(a) * k) for k in (-26, -9, 9, 26)]
-        if c["tipo"] in ("fogueira", "abrigo", "bancada"):
+        if c["tipo"] in ("fogueira", "abrigo", "bancada", "bau"):
             return [(x, y)]
+        if c["tipo"] == "muro" or (c["tipo"] == "portao" and not c.get("aberto")):
+            a = math.radians(c.get("ang", 0))
+            return [(x + math.cos(a) * k, y + math.sin(a) * k) for k in (-42, -21, 0, 21, 42)]
         return []
+
+    def abrir_portao(self, c):
+        """Abre ou fecha o portao: fechado, zumbi nao passa."""
+        m = self.mundo
+        if not c.get("aberto"):
+            for px, py in self.pontos_colisor(c):  # tira a parede
+                i = int(py // T) * N + int(px // T)
+                m.col[i] = [q for q in m.col.get(i, []) if abs(q[0] - px) > 0.01 or abs(q[1] - py) > 0.01]
+            c["aberto"] = True
+            self.msg("Portão aberto.", (200, 230, 200))
+        else:
+            c["aberto"] = False
+            for px, py in self.pontos_colisor(c):
+                m.add_colisor(px, py, 11)
+            self.msg("Portão fechado: zumbi não passa.", (200, 230, 200))
+        self.som("golpe", 0.4)
 
     def desmontar(self, c):
         m = self.mundo
@@ -1661,6 +1730,9 @@ class Jogo:
             m.col[i] = [q for q in lst if abs(q[0] - px) > 0.01 or abs(q[1] - py) > 0.01]
         if c in self.construidos:
             self.construidos.remove(c)
+        if c["tipo"] == "bau" and c.get("itens"):
+            m.add_movel(dict(id=len(m.moveis), x=c["x"], y=c["y"], tipo="mochila", aberto=False,
+                             itens=[[k, q] for k, q in c["itens"].items() if q > 0]))
         rec = next((r for r in RECEITAS if r["id"] == c["tipo"]), None)
         if rec:
             sobrou = []
@@ -1734,6 +1806,14 @@ class Jogo:
             return
         if not self.dono and self.digitado.upper().endswith(CODIGO_DONO):
             self.ativar_dono()
+        if pygame.K_q in tc:
+            if self.arma != "maos":
+                self.arma_guardada = self.arma
+                self.trocar_arma("maos")
+                self.msg("Arma guardada. Sem nada na mão você corre um pouco mais. (Q pega de volta)", (200, 220, 200))
+            else:
+                volta = self.__dict__.get("arma_guardada")
+                self.trocar_arma(volta if volta in self.armas else self.armas[-1])
         if pygame.K_c in tc:
             self.agachado = not self.agachado
             self.msg("Agachado: anda devagar, sem barulho, e os zumbis te veem menos." if self.agachado else "Levantou.",
@@ -1769,7 +1849,7 @@ class Jogo:
                 else:
                     self.msg(f"Você tem {len(self.armas)} armas. Tecla {(i + 1) % 10} está vazia.", (200, 190, 180))
         if self.roda and self.modo_construir is None:
-            i = self.armas.index(self.arma)
+            i = self.armas.index(self.arma) if self.arma in self.armas else 0
             self.trocar_arma(self.armas[(i - self.roda) % len(self.armas)])
         if pygame.K_r in tc:
             self.recarregar()
@@ -1893,7 +1973,12 @@ class Jogo:
                 if d < 60 and d < md:
                     md = d
                     melhor = ("bancada", c)
-            elif c["tipo"] in ("barricada", "fogueira", "arame"):
+            elif c["tipo"] in ("portao", "bau"):
+                d = math.hypot(c["x"] - p.x, c["y"] - p.y)
+                if d < 60 and d < md:
+                    md = d
+                    melhor = (c["tipo"], c)
+            elif c["tipo"] in ("barricada", "fogueira", "arame", "muro"):
                 d = math.hypot(c["x"] - p.x, c["y"] - p.y)
                 if d < 56 and d < md:
                     md = d
@@ -1937,8 +2022,13 @@ class Jogo:
             return "[E] Dormir no seu bunker (salva o jogo)"
         if tipo == "bancada":
             return "[E] Usar a bancada (melhorar armas e mochila)"
+        if tipo == "portao":
+            return "[E] Fechar o portão" if obj.get("aberto") else "[E] Abrir o portão"
+        if tipo == "bau":
+            return "[E] Abrir o baú (guardar coisas na base)"
         if tipo == "desmontar":
-            nome = {"barricada": "a barricada", "fogueira": "a fogueira", "arame": "o arame farpado"}[obj["tipo"]]
+            nome = {"barricada": "a barricada", "fogueira": "a fogueira", "arame": "o arame farpado",
+                    "muro": "o muro"}[obj["tipo"]]
             return f"[E] Desmontar {nome} (devolve o material)"
         if tipo == "arvore":
             return "[E] Cortar árvore (tábuas)"
@@ -1968,6 +2058,13 @@ class Jogo:
             self.acao = dict(tipo="desmontar", obj=obj, t=0.0, total=1.2, txt="Desmontando...")
         elif tipo == "bancada":
             self.estado = "bancada"
+            self.som("clique", 0.4)
+        elif tipo == "portao":
+            self.abrir_portao(obj)
+        elif tipo == "bau":
+            self.bau_atual = obj
+            obj.setdefault("itens", {})
+            self.estado = "bau"
             self.som("clique", 0.4)
         elif tipo == "cama":
             if self.zumbi_perto():
@@ -2281,6 +2378,8 @@ class Jogo:
             self.adrenalina -= dt
             vel *= 1.35
             p.folego = 100
+        if self.arma == "maos" and not mira:
+            vel *= 1.12
         if self.agachado:
             vel = min(vel, 128) * 0.5
             correndo = False
@@ -2538,6 +2637,11 @@ class Jogo:
             self.msg("Zumbi que passar no arame se machuca e fica lento.", (200, 230, 255))
         if rec["id"] == "bancada":
             self.msg("Bancada pronta! Chegue perto e aperte E para melhorar armas e a mochila.", (200, 230, 255))
+        if rec["id"] in ("muro", "portao"):
+            self.msg("Gire o personagem (mouse) para escolher a direção. Monte sua base!", (200, 230, 255))
+            return
+        if rec["id"] == "bau":
+            self.msg("Baú pronto! Aperte E perto dele para guardar suas coisas.", (200, 230, 255))
         if rec["id"] == "ponte":
             self.msg("Ponte pronta! Construa mais pedaços para atravessar a água.", (200, 230, 255))
             return
@@ -2551,7 +2655,8 @@ class Jogo:
                 return False
             tx, ty = int(x // T), int(y // T)
             return any(m.tile(tx + dx, ty + dy) != AGUA for dy in range(-2, 3) for dx in range(-2, 3))
-        r = {"barricada": 14, "fogueira": 14, "abrigo": 40, "arame": 10, "bancada": 20}[tipo]
+        r = {"barricada": 14, "fogueira": 14, "abrigo": 40, "arame": 10, "bancada": 20, "muro": 14, "portao": 14,
+             "bau": 16}[tipo]
         if m.bloqueado(x, y, r):
             return False
         if math.hypot(x - self.p.x, y - self.p.y) < (r + 14):
@@ -2574,7 +2679,7 @@ class Jogo:
             base = 7 if cid["tipo"] == "cidade" else 4
             alvo = max(alvo, round(base + min(self.dia * 0.4, 6) + 3 * esc))
         if self.resgate is not None:
-            alvo = 75
+            alvo = 22
         seguro = self.em_zona_segura(p.x, p.y)
         calma = dl < 0.05 and self.resgate is None
         if calma != self.na_calma:
@@ -2586,7 +2691,7 @@ class Jogo:
         self.t_spawn -= dt
         if self.t_spawn <= 0 and len(self.zumbis) < alvo:
             if self.resgate is not None:
-                self.t_spawn = 0.12
+                self.t_spawn = 0.7
             elif na_cidade:  # chegando na cidade enche rapido, depois vai devagar
                 self.t_spawn = 0.6 if len(self.zumbis) < alvo // 2 else 2.0
             else:
@@ -3234,6 +3339,17 @@ class Jogo:
             if c["tipo"] == "barricada" and vis.collidepoint(c["x"], c["y"]):
                 spr = self.rot(("bar",), self.spr_barricada, c["ang"] - 90, 3)
                 tela.blit(spr, (c["x"] - camx - spr.get_width() / 2, c["y"] - camy - spr.get_height() / 2))
+            elif c["tipo"] in ("muro", "portao") and vis.collidepoint(c["x"], c["y"]):
+                if c["tipo"] == "muro":
+                    base, chave = self.spr_muro, ("muro",)
+                elif c.get("aberto"):
+                    base, chave = self.spr_portao_aberto, ("portao_a",)
+                else:
+                    base, chave = self.spr_portao, ("portao",)
+                spr = self.rot(chave, base, c["ang"] - 90, 3)
+                tela.blit(spr, (c["x"] - camx - spr.get_width() / 2, c["y"] - camy - spr.get_height() / 2))
+            elif c["tipo"] == "bau" and vis.collidepoint(c["x"], c["y"]):
+                tela.blit(self.spr_bau, (c["x"] - camx - 20, c["y"] - camy - 15))
         # tiros e particulas
         for r in self.rastros:
             pygame.draw.line(tela, (255, 236, 170), (r[0] - camx, r[1] - camy), (r[2] - camx, r[3] - camy), 2)
@@ -3329,7 +3445,10 @@ class Jogo:
         ok = self.lugar_ok(rec["id"], wx, wy) and all(self.inv.get(i, 0) >= q for i, q in rec["custo"].items())
         spr = {"barricada": self.rot(("bar",), self.spr_barricada, math.degrees(p.ang), 3), "fogueira": self.spr_fogueira,
                "abrigo": self.spr_abrigo, "arame": self.rot(("arame",), self.spr_arame, math.degrees(p.ang), 3),
-               "ponte": self.spr_ponte, "bancada": self.spr_bancada}[rec["id"]].copy()
+               "ponte": self.spr_ponte, "bancada": self.spr_bancada,
+               "muro": self.rot(("muro",), self.spr_muro, math.degrees(p.ang), 3),
+               "portao": self.rot(("portao",), self.spr_portao, math.degrees(p.ang), 3),
+               "bau": self.spr_bau}[rec["id"]].copy()
         if rec["id"] == "ponte":
             wx = (int(wx // T)) * T + 16
             wy = (int(wy // T)) * T + 16

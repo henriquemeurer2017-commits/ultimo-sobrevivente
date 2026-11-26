@@ -106,6 +106,9 @@ ARMAS = [
          balas=1, alcance=1800, recarga=2.0, ruido=600, auto=False, silencia=True, fura=8, loja=400,
          desc="Atravessa 8 zumbis. 10 tiros no pente."),
 ]
+ARMAS.append(dict(id="maos", nome="Sem arma", melee=True, dano=10, cd=0.4, alcance=42, ruido=0, escondida=True))
+ARMA_IDX = {a["id"]: i for i, a in enumerate(ARMAS)}
+ARMAS_IDS = set(ARMA_IDX) - {"maos"}
 # pacotes da loja: (nome, itens, preco em moedas)
 LOJA_PACOTES = [("Munição de AK-47 x120", {"556": 120}, 25), ("Cartuchos x40", {"12": 40}, 20),
                 ("Munição de sniper x30", {"308": 30}, 25), ("Foguetes de RPG x5", {"foguete": 5}, 40),
@@ -171,5 +174,8 @@ RECEITAS = [
     dict(id="arame", nome="Arame farpado", custo={"sucata": 3}),
     dict(id="ponte", nome="Ponte de madeira", custo={"tabua": 4}),
     dict(id="bancada", nome="Bancada", custo={"tabua": 10, "sucata": 6, "ferramentas": 1}),
+    dict(id="muro", nome="Muro", custo={"tabua": 4, "sucata": 2}),
+    dict(id="portao", nome="Portão", custo={"tabua": 5, "sucata": 3}),
+    dict(id="bau", nome="Baú", custo={"tabua": 8}),
 ]
 RAIO_ABRIGO = 260
