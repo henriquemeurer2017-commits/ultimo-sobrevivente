@@ -501,6 +501,17 @@ class Mundo:
                 mv["itens"].append(["galao", 1])
         for i, c in enumerate(self.carros):  # cada carro tem um pouco de gasolina
             c["gas"] = round(random.Random(self.seed * 31 + i).uniform(0, 60))
+        # lanternas: a boa nas casas e carros, a tatica nas caixas militares, o holofote nos ultimos bunkers
+        for mv in self.moveis:
+            r = rnd.random()
+            if mv["tipo"] in ("armario", "gaveta", "caixa") and r < 0.07:
+                mv["itens"].append(["lanterna1", 1])
+            elif mv["tipo"] == "porta_malas" and r < 0.05:
+                mv["itens"].append(["lanterna1", 1])
+            elif mv["tipo"] == "militar" and r < 0.25:
+                mv["itens"].append(["lanterna2", 1])
+            elif mv["tipo"] == "vitrine" and r < 0.5:
+                mv["itens"].append(["lanterna2", 1])
         # seringas rarissimas nos hospitais
         medicos = [mv for mv in self.moveis if mv["tipo"] == "medico" and (mv.get("predio") or {}).get("tipo") != "militar"]
         rnd.shuffle(medicos)
@@ -546,6 +557,8 @@ class Mundo:
             if porte == "grande" or rnd.random() < 0.3:
                 arsenal.append(["seringa", 1])
             arsenal.append(["mochila2" if i == 0 else ("mochila3" if i in (1, 3) else "mochila4"), 1])
+            if i >= 3:  # o HOLOFOTE MILITAR fica nos ultimos bunkers
+                arsenal.append(["lanterna3", 1])
             self.moveis.append(dict(
                 id=len(self.moveis), x=(x + 6) * T + 30, y=(y + h - 2) * T + 14, tipo="arsenal", aberto=False, predio=b,
                 itens=arsenal))

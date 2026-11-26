@@ -264,8 +264,24 @@ class Jogo:
         # no navegador quem segura a velocidade e o proprio navegador; aqui so mede o tempo
         dt = min(self.relogio.tick(0 if NAVEGADOR else FPS) / 1000.0, 0.05)
         self.eventos()
+        piloto = self.__dict__.get("piloto")
+        if piloto and self.mundo is not None:
+            piloto.quadro(dt)
         getattr(self, "tela_" + self.estado)(dt)
+        if piloto and self.mundo is not None and self.estado == "jogo":
+            piloto.desenhar(self.tela, self.f_med, self.f_peq)
         pygame.display.flip()
+
+    def iniciar_piloto(self):
+        """Mundo novo so do piloto (nao mexe nos seus mundos) e o Claude joga sozinho."""
+        import piloto as _pil
+        self.arq = os.path.join(MUNDOS_DIR, "piloto_do_claude.json")
+        self.nome_mundo = "Piloto do Claude"
+        if os.path.exists(self.arq):  # continua de onde parou
+            self.carregar(self.arq)
+        else:
+            self.novo_jogo()
+        self.piloto = _pil.Piloto(self)
 
     def eventos(self):
         self.click = False
@@ -545,7 +561,7 @@ class Jogo:
                 import platform
                 qtd = platform.window.jogadoresTotal
                 if qtd:
-                    self.texto(f"{int(qtd)} jogadores já jogaram o Último Sobrevivente", (W // 2, H - 72), self.f_med2,
+                    self.texto(f"{int(qtd)} jogadores já jogaram o seu jogo", (W // 2, H - 72), self.f_med2,
                                (255, 210, 120), centro=True)
             except Exception:
                 pass
@@ -764,6 +780,7 @@ class Jogo:
         self.niveis = {}
         self.telhado_b = None   # predio em cujo telhado voce esta
         self.dirigindo = None   # carro que voce esta dirigindo
+        self.nivel_lanterna = 0
         self.cao = None         # o cachorro: {x, y, amigo, ang, t_mordida, t_latido, au}
         self.vel_carro = 0.0
         self.colete = 0.0
@@ -847,7 +864,7 @@ class Jogo:
             explorado=self.explorado.hex(), lanterna=self.lanterna, nivel_mochila=self.nivel_mochila,
             feridas=[self.p.sangrando, self.p.perna, self.p.braco],
             niveis=self.niveis, miras=self.miras, reforco_mochila=self.reforco_mochila,
-            colete=self.colete, capacete=self.capacete,
+            colete=self.colete, capacete=self.capacete, nivel_lanterna=self.nivel_lanterna,
             cao=dict(x=self.cao["x"], y=self.cao["y"], amigo=self.cao["amigo"]) if self.cao else None,
             carros=[[i, round(c["x"], 1), round(c["y"], 1), round(c["ang"], 1), c.get("gas", 0)]
                     for i, c in enumerate(m.carros) if c.get("mexeu")],
@@ -908,6 +925,7 @@ class Jogo:
         self.nivel_mochila = d.get("nivel_mochila", 0)
         self.niveis = d.get("niveis", {})
         self.colete = d.get("colete", 0.0)
+        self.nivel_lanterna = d.get("nivel_lanterna", 1)
         if d.get("cao"):
             self.cao = dict(d["cao"], ang=0.0, t_mordida=0.0, t_latido=0.0, au=0.0, t_aviso=0.0, passo=0.0)
             if self.cao["amigo"]:
@@ -1088,6 +1106,14 @@ class Jogo:
             if avisar:
                 self.msg("Silenciador guardado: vai na próxima arma que você achar.", (180, 230, 255))
             return
+        if item.startswith("lanterna") and item[8:].isdigit():
+            n = int(item[8:])
+            if n > self.nivel_lanterna:
+                self.nivel_lanterna = n
+                self.msg(f"Lanterna nova: {LANTERNAS[n][0]}! A luz vai mais longe.", (255, 240, 150))
+            elif avisar:
+                self.msg(f"Achou uma {LANTERNAS[n][0]}, mas a sua é igual ou melhor.", (190, 185, 175))
+            return 0
         if item.startswith("mochila") and item[7:].isdigit():
             n = int(item[7:])
             if n > self.nivel_mochila:
@@ -1909,8 +1935,9 @@ class Jogo:
                 cao["au"] = 0.8
             return
         alvo_x, alvo_y, vel = None, None, 0.0
-        # zumbi perto de voce: late e vai morder
-        perigo = [z for z in self.zumbis if (z.x - p.x) ** 2 + (z.y - p.y) ** 2 < 380 ** 2]
+        # so ataca quando voce manda (tecla X); quieto ele nao late, para nao entregar voce
+        ataca = cao.get("modo") == "ataque"
+        perigo = [z for z in self.zumbis if (z.x - p.x) ** 2 + (z.y - p.y) ** 2 < 380 ** 2] if ataca else []
         if perigo:
             if cao["t_latido"] <= 0:
                 cao["t_latido"] = 2.5
@@ -1931,9 +1958,12 @@ class Jogo:
                 alvo_x, alvo_y, vel = z.x, z.y, 230.0
         else:
             d = math.hypot(p.x - cao["x"], p.y - cao["y"])
+            ult = cao.get("ult_p", (p.x, p.y))
+            andando = math.hypot(p.x - ult[0], p.y - ult[1]) > 0.5
+            cao["ult_p"] = (p.x, p.y)
             if d > 1100:  # ficou muito para tras: aparece do seu lado
                 cao["x"], cao["y"] = p.x + 50, p.y + 40
-            elif d > 70:
+            elif d > 70 and (andando or d > 180):  # voce anda, ele anda; voce para, ele para do seu lado
                 alvo_x, alvo_y, vel = p.x, p.y, (300.0 if d > 300 or self.dirigindo else 150.0)
         if alvo_x is not None:
             a = math.atan2(alvo_y - cao["y"], alvo_x - cao["x"])
@@ -2156,6 +2186,12 @@ class Jogo:
             else:
                 volta = self.__dict__.get("arma_guardada")
                 self.trocar_arma(volta if volta in self.armas else self.armas[-1])
+        if pygame.K_x in tc and self.cao and self.cao["amigo"]:
+            ataque = self.cao.get("modo") != "ataque"
+            self.cao["modo"] = "ataque" if ataque else "quieto"
+            self.cao["au"] = 0.8 if ataque else 0.0
+            self.msg("THOR, ATACA! Ele vai morder os zumbis perto de você. (X de novo: quieto)" if ataque else
+                     "Thor quieto: ele só te segue, sem latir. (X: ataca)", (255, 220, 140))
         if pygame.K_t in tc:
             self.deitado = not self.__dict__.get("deitado", False)
             if self.deitado:
@@ -2447,7 +2483,7 @@ class Jogo:
         if tipo == "cao":
             obj["amigo"] = True
             obj["au"] = 1.2
-            self.msg("O THOR agora é seu amigo! Ele te segue, late quando tem zumbi perto e MORDE os zumbis.",
+            self.msg("O THOR agora é seu amigo! Ele te segue quietinho. Aperte X para ele ATACAR os zumbis.",
                      (255, 220, 140))
             self.salvar()
             return
@@ -4061,12 +4097,17 @@ class Jogo:
         self.escuro.fill((cor[0], cor[1], cor[2], D))
         sub = pygame.BLEND_RGBA_SUB
         self.escuro.blit(self.luz_jog, (psx - 130, psy - 130), special_flags=sub)
-        if self.lanterna:
+        nome_l, alcance_l, abertura_l, pisca_l = LANTERNAS[self.__dict__.get("nivel_lanterna", 1)]
+        falhou = pisca_l and (math.sin(time.time() * 7.3) + math.sin(time.time() * 13.1) > 1.55)
+        if self.lanterna and not falhou:
+            cones = self.__dict__.setdefault("cones_lanterna", {})
+            if alcance_l not in cones:
+                cones[alcance_l] = G.luz_cone(alcance_l, abertura_l)
             q = int(round(math.degrees(self.p.ang) / 3)) % 120
-            cone = self.cone_cache.get(q)
+            cone = self.cone_cache.get((alcance_l, q))
             if cone is None:
-                cone = pygame.transform.rotate(self.cone, -q * 3)
-                self.cone_cache[q] = cone
+                cone = pygame.transform.rotate(cones[alcance_l], -q * 3)
+                self.cone_cache[(alcance_l, q)] = cone
                 if len(self.cone_cache) > 24:
                     self.cone_cache.popitem(last=False)
             self.escuro.blit(cone, (psx - cone.get_width() / 2, psy - cone.get_height() / 2), special_flags=sub)
@@ -4153,7 +4194,9 @@ class Jogo:
                 self.texto(f"{self.pente.get(self.arma, 0)} / {self.inv.get(a['mun'], 0)}", (W - 250, H - 102), self.f_grande, cor)
             extras = [n for n, tem in (("silenciador", self.arma in self.silen), ("mira", self.arma in self.miras)) if tem]
             if extras:
-                self.texto(" + ".join(extras), (W - 120, H - 92), self.f_peq, (150, 210, 255))
+                fm = self.__dict__.get("f_mini") or pygame.font.SysFont("segoeui", 12)
+                self.f_mini = fm
+                self.texto(" + ".join(extras), (W - 140, H - 150), fm, (150, 210, 255), centro=True)
         x = W - 320
         for i, aa in enumerate([ARMAS[ARMA_IDX[k]] for k in self.armas[:10]]):
             r = pygame.Rect(x + 4 + i * 31, H - 50, 28, 30)
@@ -4573,6 +4616,8 @@ def main():
         if TESTE:
             j.teste()
             return
+        if "--piloto" in sys.argv:
+            j.iniciar_piloto()
         j.rodar()
     except SystemExit:
         raise

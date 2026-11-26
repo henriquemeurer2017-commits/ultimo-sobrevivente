@@ -447,6 +447,17 @@ def _desenha_icone_bruto(s, item, x, y, k=1.0):
         pygame.draw.rect(s, (200, 40, 30), R(-7, -7, 14, 15), border_radius=2)
         pygame.draw.rect(s, (40, 40, 44), R(1, -11, 5, 4))
         pygame.draw.line(s, (240, 200, 60), (x - 4 * k, y + 4 * k), (x + 4 * k, y - 4 * k), max(1, int(2 * k)))
+    elif item.startswith("lanterna") and item[8:].isdigit():
+        n = int(item[8:])
+        corpo = [(70, 70, 76), (40, 44, 52), (50, 64, 44), (30, 32, 34)][n]
+        comp = 14 + n * 2
+        pygame.draw.rect(s, (14, 14, 16), R(-comp // 2 - 1, -4, comp + 2, 8), border_radius=2)
+        pygame.draw.rect(s, corpo, R(-comp // 2, -3, comp, 6), border_radius=2)
+        pygame.draw.rect(s, (14, 14, 16), R(comp // 2 - 3, -6 - n, 7, 12 + 2 * n), border_radius=2)
+        pygame.draw.rect(s, (255, 240, 150), R(comp // 2 + 1, -5 - n, 3, 10 + 2 * n))
+        for i in range(n + 1):
+            pygame.draw.line(s, (255, 240, 150), (x + (comp // 2 + 6) * k, y), (x + (comp // 2 + 12 + i * 3) * k,
+                             y + (i - n / 2) * 4 * k), 1)
     elif item == "seringa":
         pygame.draw.line(s, (200, 200, 210), (x - 11 * k, y + 8 * k), (x + 6 * k, y - 9 * k), max(1, int(6 * k)))
         pygame.draw.line(s, (240, 60, 70), (x - 8 * k, y + 5 * k), (x + 3 * k, y - 6 * k), max(1, int(3 * k)))

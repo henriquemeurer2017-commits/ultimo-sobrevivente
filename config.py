@@ -50,6 +50,9 @@ ITENS = {
     "silenciador": "Silenciador",
     "flecha": "Flechas",
     "galao": "Galão de gasolina",
+    "lanterna1": "Lanterna boa",
+    "lanterna2": "Lanterna tática",
+    "lanterna3": "Holofote militar",
     "38": "Balas .38",
     "taco": "Taco com pregos",
     "revolver": "Revólver",
@@ -125,6 +128,9 @@ LOJA_PACOTES = [("Munição de AK-47 x120", {"556": 120}, 25), ("Cartuchos x40",
                 ("Kit médico x3", {"kit": 3}, 30)]
 CODIGO_DONO = "DONO"
 MOEDAS_ZERAR = 6          # moedas ganhas cada vez que zera o jogo (resgate)
+# lanternas: (nome, alcance da luz, abertura, pisca falhando?)
+LANTERNAS = [("Lanterna velha", 330, 0.34, True), ("Lanterna boa", 480, 0.42, False),
+             ("Lanterna tática", 640, 0.50, False), ("Holofote militar", 840, 0.58, False)]
 # bancada: coisas para fabricar (id, nome, explicacao, custo)
 FABRICAR = [
     ("colete", "Colete de sucata", "Você leva quase metade do dano dos zumbis.", {"sucata": 12, "ferramentas": 2}),
