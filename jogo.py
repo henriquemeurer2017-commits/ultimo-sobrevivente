@@ -295,6 +295,16 @@ class Jogo:
     def sair(self):
         if self.mundo is not None and self.estado in ("jogo", "pausa", "mapa", "construir"):
             self.salvar()
+        if NAVEGADOR:
+            # no site: sai da tela cheia e fecha a janela (sem ficar aquela tela cinza travada)
+            try:
+                import platform
+                platform.window.sairDoJogo()
+            except Exception:
+                pass
+            self.mundo = None
+            self.estado = "menu"
+            return
         pygame.quit()
         sys.exit(0)
 

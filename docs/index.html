@@ -503,5 +503,39 @@ document.addEventListener("keydown", telaCheia, {once: true});
   };
 })();
 </script>
+
+<div id="telasair" style="display:none">
+  <img src="favicon.png" alt="">
+  <div class="ts-titulo">ATÉ A PRÓXIMA, SOBREVIVENTE</div>
+  <div class="ts-txt">Seu jogo foi salvo.</div>
+  <button id="ts-fechar">Fechar o jogo</button>
+  <button id="ts-voltar">Voltar a jogar</button>
+  <div class="ts-dica">Se a janela não fechar, aperte <b>Alt + F4</b>.</div>
+</div>
+<style>
+#telasair { position: fixed; inset: 0; z-index: 99999999; background: radial-gradient(circle at 50% 40%, #2a0d0d, #000 80%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: Arial, sans-serif; color: #e8d8c8; }
+#telasair img { width: 120px; height: 120px; image-rendering: pixelated; filter: drop-shadow(0 0 18px #a00); }
+.ts-titulo { font-size: 44px; font-weight: 900; color: #e3271b; margin: 14px 0 6px; text-shadow: 3px 4px 0 #300; text-align: center; }
+.ts-txt { font-size: 18px; margin-bottom: 22px; }
+#telasair button { font-size: 20px; font-weight: bold; padding: 12px 36px; margin: 6px; border-radius: 10px; cursor: pointer;
+  background: #5a1a14; color: #f0e0d0; border: 2px solid #c0503c; min-width: 280px; }
+#telasair button:hover { background: #8a2a20; }
+.ts-dica { margin-top: 18px; font-size: 15px; color: #a89888; }
+</style>
+<script>
+window.sairDoJogo = function () {
+  try { if (document.fullscreenElement) document.exitFullscreen(); } catch (e) {}
+  const t = document.getElementById("telasair");
+  t.style.display = "flex";
+  try { window.close(); } catch (e) {}
+};
+document.getElementById("ts-fechar").onclick = function () {
+  try { window.close(); } catch (e) {}
+  setTimeout(() => { document.querySelector("#telasair .ts-dica").innerHTML =
+    "O navegador não deixou fechar sozinho: aperte <b>Alt + F4</b> (ou o X lá em cima)."; }, 300);
+};
+document.getElementById("ts-voltar").onclick = function () { location.reload(); };
+</script>
 </body>
 </html>
