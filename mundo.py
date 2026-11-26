@@ -446,6 +446,18 @@ class Mundo:
                     mv["itens"].append(["smg" if rnd.random() < 0.55 else "besta", 1])
                 if rnd.random() < 0.4:
                     mv["itens"].append(["flecha", rnd.randint(6, 14)])
+        # taco com pregos, revolver e balas .38
+        for mv in casa:
+            r = rnd.random()
+            if r < 0.05:
+                mv["itens"].append(["taco", 1])
+            elif r < 0.08:
+                mv["itens"].append(["revolver", 1])
+            if rnd.random() < 0.10:
+                mv["itens"].append(["38", rnd.randint(4, 10)])
+        for mv in malas:
+            if rnd.random() < 0.06:
+                mv["itens"].append(["taco", 1])
         # miras (lunetas): raras nas casas, mais comuns nas caixas militares, algumas no chao
         for mv in casa:
             if rnd.random() < 0.035:

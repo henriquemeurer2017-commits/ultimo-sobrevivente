@@ -46,6 +46,9 @@ ITENS = {
     "308": "Munição de sniper",
     "silenciador": "Silenciador",
     "flecha": "Flechas",
+    "38": "Balas .38",
+    "taco": "Taco com pregos",
+    "revolver": "Revólver",
     "foguete": "Foguetes de RPG",
     "katana": "Katana",
     "minigun": "Minigun",
@@ -90,6 +93,9 @@ ARMAS = [
          balas=1, alcance=650, recarga=1.8, ruido=900, auto=True, silencia=True, fura=0),
     dict(id="besta", nome="Besta", melee=False, mun="flecha", pente=1, dano=130, cd=0.3, disp=0.008,
          balas=1, alcance=950, recarga=1.3, ruido=30, auto=False, silencia=False, fura=1),
+    dict(id="taco", nome="Taco com pregos", melee=True, dano=48, cd=0.5, alcance=62, ruido=40, empurra=True),
+    dict(id="revolver", nome="Revólver", melee=False, mun="38", pente=6, dano=72, cd=0.42, disp=0.02,
+         balas=1, alcance=820, recarga=2.0, ruido=1000, auto=False, silencia=False, fura=1),
     # armas lendarias: so na LOJA, compradas com moedinhas
     dict(id="katana", nome="Katana", melee=True, dano=140, cd=0.28, alcance=74, ruido=0, loja=150,
          desc="Corta rápido e forte. Sem barulho."),
@@ -119,7 +125,7 @@ MOEDAS_ZERAR = 6          # moedas ganhas cada vez que zera o jogo (resgate)
 NIVEL_MAX = 3
 MOCHILA_EXTRA = 40      # espaco a mais por nivel de reforco da mochila
 # quanto a tela treme em cada tiro
-TREMOR = {"pistola": 2.5, "espingarda": 8, "fuzil": 2.2, "rifle": 9, "smg": 1.8, "besta": 1.5, "minigun": 2,
+TREMOR = {"revolver": 5, "pistola": 2.5, "espingarda": 8, "fuzil": 2.2, "rifle": 9, "smg": 1.8, "besta": 1.5, "minigun": 2,
           "dragao": 9, "dourado": 9, "rpg": 16}
 ARMA_IDX = {a["id"]: i for i, a in enumerate(ARMAS)}
 ARMAS_IDS = set(ARMA_IDX)
@@ -143,7 +149,8 @@ LOOT = {
              ("rifle", 1.2, 1, 1), ("silenciador", 1.6, 1, 1), ("kit", 1.5, 1, 1)],
 }
 # o que um zumbi derrubado pode deixar cair (inclui as armas novas)
-LOOT_ZUMBI = LOOT["chao"] + [("facao", 1.5, 1, 1), ("smg", 0.6, 1, 1), ("besta", 0.6, 1, 1), ("flecha", 4, 3, 8)]
+LOOT_ZUMBI = LOOT["chao"] + [("facao", 1.5, 1, 1), ("smg", 0.6, 1, 1), ("besta", 0.6, 1, 1), ("flecha", 4, 3, 8),
+                             ("taco", 1.5, 1, 1), ("revolver", 0.6, 1, 1), ("38", 4, 4, 10)]
 
 NOMES_MOVEIS = {
     "armario": "armário", "geladeira": "geladeira", "gaveta": "cômoda", "caixa": "caixa",
@@ -155,7 +162,7 @@ NOMES_MOVEIS = {
 # espaco que cada unidade ocupa na mochila
 ESPACO = {"comida": 1, "agua": 1, "bandagem": 0.5, "kit": 1.5, "9mm": 0.04, "12": 0.08, "556": 0.04, "308": 0.08,
           "tabua": 1, "sucata": 1, "ferramentas": 2, "seringa": 0.5, "saco": 4,
-          "flecha": 0.15, "mira": 0.5, "foguete": 1}
+          "flecha": 0.15, "38": 0.05, "mira": 0.5, "foguete": 1}
 # estacoes do ano: cada uma dura 6 dias. (nome, multiplica cor, soma cor, fome x, sede x)
 ESTACOES = [("Verão", (1.04, 1.02, 0.92), (8, 6, 0), 1.0, 1.35),
             ("Outono", (1.12, 0.92, 0.70), (14, 4, 0), 1.0, 1.0),

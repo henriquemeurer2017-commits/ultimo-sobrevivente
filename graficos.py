@@ -264,13 +264,19 @@ def _boneco(corpo, pele, cabelo, arma=None, zumbi=False, rnd=None, ombro=13):
                 pygame.draw.line(s, tom(pele, -25), (c, y), (c + 9, y + lado * 2), 6)
                 pygame.draw.line(s, pele, (c, y), (c + 8, y + lado * 2), 4)
                 pygame.draw.circle(s, pele, (c + 10, y + lado * 2), 3)
-        elif arma in ("faca", "machado", "facao", "katana"):
+        elif arma in ("faca", "machado", "facao", "katana", "taco"):
             pygame.draw.line(s, tom(pele, -25), (c, c + ombro - 3), (c + 14, c + ombro - 6), 6)
             pygame.draw.line(s, pele, (c, c + ombro - 3), (c + 13, c + ombro - 6), 4)
             pygame.draw.line(s, tom(pele, -25), (c, c - ombro + 3), (c + 6, c - ombro + 7), 6)
             if arma == "faca":
                 pygame.draw.line(s, (90, 70, 50), (c + 13, c + ombro - 6), (c + 18, c + ombro - 6), 4)
                 pygame.draw.line(s, (200, 205, 210), (c + 18, c + ombro - 6), (c + 29, c + ombro - 7), 3)
+            elif arma == "taco":
+                pygame.draw.line(s, (90, 60, 34), (c + 8, c + ombro - 3), (c + 40, c + ombro - 12), 5)
+                pygame.draw.line(s, (160, 116, 66), (c + 8, c + ombro - 4), (c + 40, c + ombro - 13), 3)
+                for px in (30, 34, 38):
+                    py = c + ombro - 4 - (px - 8) * 9 // 32
+                    pygame.draw.line(s, (200, 200, 210), (c + px, py - 5), (c + px, py + 3), 1)
             elif arma == "katana":
                 pygame.draw.line(s, (30, 30, 34), (c + 12, c + ombro - 6), (c + 19, c + ombro - 6), 5)
                 pygame.draw.line(s, (215, 220, 230), (c + 19, c + ombro - 6), (c + 46, c + ombro - 10), 3)
@@ -283,8 +289,7 @@ def _boneco(corpo, pele, cabelo, arma=None, zumbi=False, rnd=None, ombro=13):
                 pygame.draw.polygon(s, (170, 175, 182), [(c + 27, c + ombro - 15), (c + 35, c + ombro - 14),
                                                           (c + 33, c + ombro - 4), (c + 27, c + ombro - 6)])
         else:
-            comp = {"pistola": 14, "espingarda": 30, "fuzil": 30, "rifle": 34, "smg": 20, "besta": 24, "minigun": 34,
-                    "dragao": 30, "dourado": 38, "rpg": 36}.get(arma, 14)
+            comp = COMP_ARMA.get(arma, 16)
             larg = {"pistola": 4, "espingarda": 5, "fuzil": 5, "rifle": 4, "smg": 5, "besta": 4, "minigun": 8,
                     "dragao": 7, "dourado": 5, "rpg": 9}.get(arma, 4)
             # bracos segurando a arma
@@ -292,28 +297,7 @@ def _boneco(corpo, pele, cabelo, arma=None, zumbi=False, rnd=None, ombro=13):
             pygame.draw.line(s, tom(pele, -25), (c, c - ombro + 3), (c + 12 if comp < 20 else c + 20, c), 6)
             pygame.draw.line(s, pele, (c, c + ombro - 3), (c + 14, c + 3), 4)
             pygame.draw.line(s, pele, (c, c - ombro + 3), (c + 11 if comp < 20 else c + 19, c), 4)
-            x0 = c + 8
-            cor_arma = {"dourado": (210, 168, 50), "rpg": (74, 96, 58), "dragao": (160, 44, 34)}.get(arma, (32, 32, 34))
-            pygame.draw.rect(s, cor_arma, (x0, c - larg // 2 + 1, comp, larg))
-            if arma == "rpg":
-                pygame.draw.polygon(s, (120, 120, 110), [(x0 + comp, c - 6), (x0 + comp + 9, c + 1), (x0 + comp, c + 8)])
-            if arma == "minigun":
-                for yy in (-2, 1, 4):
-                    pygame.draw.line(s, (90, 92, 98), (x0 + 10, c + yy), (x0 + comp, c + yy), 1)
-            pygame.draw.rect(s, (70, 70, 74), (x0, c - larg // 2 + 1, comp, 1))
-            if arma == "espingarda":
-                pygame.draw.rect(s, (110, 76, 46), (x0 - 4, c - 3, 12, 7))
-            if arma == "fuzil":
-                pygame.draw.rect(s, (40, 40, 42), (x0 + 10, c + 2, 4, 7))
-            if arma == "smg":
-                pygame.draw.rect(s, (40, 40, 42), (x0 + 6, c + 2, 3, 8))
-            if arma == "besta":
-                pygame.draw.line(s, (110, 80, 50), (x0 + 16, c - 12), (x0 + 16, c + 12), 4)
-                pygame.draw.line(s, (220, 220, 210), (x0 + 16, c - 12), (x0 + 6, c), 1)
-                pygame.draw.line(s, (220, 220, 210), (x0 + 16, c + 12), (x0 + 6, c), 1)
-            if arma == "rifle":
-                pygame.draw.rect(s, (20, 20, 22), (x0 + 6, c - 4, 10, 3))
-                pygame.draw.rect(s, (96, 82, 54), (x0 - 4, c - 3, 12, 7))
+            desenha_arma(s, arma, c + 4, c + 1, 1.0)
     # mochila
     if not zumbi:
         pygame.draw.rect(s, (70, 56, 36), (c - 16, c - 9, 10, 18), border_radius=3)
@@ -416,7 +400,7 @@ def _desenha_icone_bruto(s, item, x, y, k=1.0):
         pygame.draw.rect(s, (200, 40, 40), R(-9, -7, 18, 14), border_radius=3)
         pygame.draw.rect(s, (250, 250, 250), R(-2, -5, 4, 10))
         pygame.draw.rect(s, (250, 250, 250), R(-5, -2, 10, 4))
-    elif item in ("9mm", "12", "556", "308"):
+    elif item in ("9mm", "12", "556", "308", "38"):
         cor = {"9mm": (220, 190, 70), "12": (200, 60, 50), "556": (200, 170, 90), "308": (230, 150, 60)}[item]
         n = 3 if item != "556" else 4
         for i in range(n):
@@ -507,6 +491,14 @@ def _desenha_icone_bruto(s, item, x, y, k=1.0):
         elif item == "faca":
             pygame.draw.rect(s, (80, 60, 40), R(-8, -2, 6, 4))
             pygame.draw.polygon(s, (205, 210, 215), [(x - 2 * k, y - 2 * k), (x + 8 * k, y - 1 * k), (x - 2 * k, y + 2 * k)])
+        elif item == "taco":
+            pygame.draw.line(s, (90, 60, 34), (x - 12 * k, y + 4 * k), (x + 12 * k, y - 4 * k), max(3, int(5 * k)))
+            pygame.draw.line(s, (170, 124, 72), (x - 12 * k, y + 3 * k), (x + 12 * k, y - 5 * k), max(1, int(3 * k)))
+            for px in (4, 8, 11):
+                pygame.draw.line(s, (210, 210, 220), (x + px * k, y - (px / 3 + 4) * k), (x + px * k, y - (px / 3 - 2) * k), 1)
+        elif item in COMP_ARMA:
+            kk = k * 0.78
+            desenha_arma(s, item, x - COMP_ARMA[item] * kk / 2, y, kk)
         else:
             corpo = {"dourado": (232, 186, 60), "dragao": (196, 60, 44), "minigun": (150, 154, 164)}.get(item, (120, 124, 134))
             pygame.draw.rect(s, (20, 20, 24), R(-L // 2 - 1, -3, L + 2, 6))
@@ -520,6 +512,102 @@ def _desenha_icone_bruto(s, item, x, y, k=1.0):
                 pygame.draw.rect(s, corpo, R(1, 1, 3, 8))
             if item == "rifle":
                 pygame.draw.rect(s, (60, 62, 70), R(-2, -5, 8, 3))
+
+
+# ------------------------------------------------------------------ armas de fogo (desenho detalhado)
+COMP_ARMA = {"pistola": 17, "revolver": 21, "smg": 23, "espingarda": 35, "fuzil": 35, "rifle": 40, "besta": 26,
+             "minigun": 38, "dragao": 34, "dourado": 42, "rpg": 40}
+
+
+def desenha_arma(s, arma, x, y, k=1.0):
+    """Arma deitada, coronha na esquerda (x) e cano na direita, no meio da altura y."""
+    def R(a, b, w, h):
+        return pygame.Rect(int(x + a * k), int(y + b * k), max(1, int(round(w * k))), max(1, int(round(h * k))))
+
+    def P(pts):
+        return [(x + a * k, y + b * k) for a, b in pts]
+
+    preto = (18, 18, 22)
+    aco = (58, 62, 70)
+    aco_claro = (120, 126, 138)
+    madeira = (138, 88, 48)
+    madeira_e = (96, 60, 32)
+
+    def peca(r, cor, brilho=True):
+        pygame.draw.rect(s, preto, r.inflate(2, 2))
+        pygame.draw.rect(s, cor, r)
+        if brilho and r.h >= 3:
+            pygame.draw.line(s, tom(cor, 45), r.topleft, (r.right - 1, r.top), 1)
+
+    if arma == "pistola":
+        peca(R(1, 1, 5, 8), (34, 34, 38), False)
+        peca(R(0, -3, 17, 5), aco)
+        pygame.draw.rect(s, preto, R(6, 2, 4, 3), 1)
+        pygame.draw.rect(s, preto, R(15, -2, 2, 2))
+    elif arma == "revolver":
+        peca(R(0, 0, 6, 8), madeira)
+        peca(R(4, -3, 7, 5), aco_claro)
+        pygame.draw.circle(s, preto, (int(x + 9 * k), int(y)), int(4.5 * k))
+        pygame.draw.circle(s, (150, 156, 168), (int(x + 9 * k), int(y)), int(3.5 * k))
+        pygame.draw.circle(s, preto, (int(x + 9 * k), int(y)), max(1, int(1 * k)))
+        peca(R(12, -2, 9, 3), aco_claro)
+    elif arma == "smg":
+        pygame.draw.line(s, aco, (x, y - 1 * k), (x + 4 * k, y - 1 * k), max(1, int(2 * k)))
+        peca(R(3, -3, 15, 6), (48, 52, 58))
+        peca(R(9, 2, 4, 10), preto, False)
+        peca(R(4, 2, 3, 5), (34, 34, 38), False)
+        peca(R(18, -1, 5, 2), aco)
+    elif arma in ("espingarda", "dragao"):
+        corpo = (160, 44, 34) if arma == "dragao" else (52, 54, 60)
+        peca(R(0, -3, 11, 6), madeira if arma == "espingarda" else (110, 30, 24))
+        pygame.draw.line(s, madeira_e, (x + 2 * k, y + 2 * k), (x + 9 * k, y + 2 * k), 1)
+        peca(R(10, -3, 7, 6), corpo)
+        peca(R(17, -2, 17, 3), (78, 82, 90) if arma == "espingarda" else (200, 160, 60))
+        peca(R(19, 1, 9, 4), (156, 108, 64) if arma == "espingarda" else (60, 60, 64))
+        if arma == "dragao":
+            pygame.draw.circle(s, preto, (int(x + 13 * k), int(y + 6 * k)), int(4 * k))
+            pygame.draw.circle(s, (200, 160, 60), (int(x + 13 * k), int(y + 6 * k)), int(3 * k))
+    elif arma == "fuzil":
+        peca(R(0, -3, 10, 6), madeira)
+        peca(R(10, -3, 12, 6), (56, 58, 62))
+        pygame.draw.polygon(s, preto, P([(14, 2), (19, 2), (22, 12), (16, 13)]))
+        pygame.draw.polygon(s, (60, 54, 44), P([(15, 3), (18, 3), (20, 11), (17, 12)]))
+        peca(R(22, -2, 7, 5), madeira)
+        peca(R(29, -1, 6, 2), aco)
+        pygame.draw.rect(s, preto, R(30, -4, 1, 3))
+    elif arma in ("rifle", "dourado"):
+        dourado = arma == "dourado"
+        corpo = (214, 172, 60) if dourado else (64, 74, 52)
+        peca(R(0, -3, 12, 6), corpo)
+        peca(R(12, -2, 14, 5), (150, 118, 40) if dourado else (44, 48, 42))
+        peca(R(26, -1, 16 if dourado else 14, 2), (190, 150, 50) if dourado else (40, 40, 42))
+        peca(R(13, -8, 14, 4), (28, 28, 32))
+        pygame.draw.rect(s, (110, 200, 255), R(26, -8, 2, 4))
+        pygame.draw.line(s, preto, (x + 18 * k, y + 3 * k), (x + 22 * k, y + 9 * k), 1)
+        pygame.draw.line(s, preto, (x + 22 * k, y + 3 * k), (x + 18 * k, y + 9 * k), 1)
+    elif arma == "minigun":
+        peca(R(0, -5, 14, 10), (74, 76, 84))
+        peca(R(2, 5, 9, 7), (80, 90, 60))
+        for yy in (-3, 0, 3):
+            peca(R(14, yy - 1, 24, 2), (150, 154, 164), False)
+        pygame.draw.rect(s, preto, R(14, -5, 2, 10))
+        pygame.draw.rect(s, preto, R(30, -5, 2, 10))
+    elif arma == "rpg":
+        peca(R(0, -4, 30, 8), (76, 98, 60))
+        peca(R(8, 4, 4, 6), (50, 54, 44), False)
+        peca(R(18, 4, 3, 5), (50, 54, 44), False)
+        pygame.draw.polygon(s, preto, P([(29, -6), (40, 0), (29, 6)]))
+        pygame.draw.polygon(s, (150, 150, 138), P([(30, -5), (38, 0), (30, 5)]))
+    elif arma == "besta":
+        peca(R(0, -2, 20, 4), (110, 80, 50))
+        pygame.draw.line(s, (120, 90, 60), (x + 18 * k, y - 11 * k), (x + 18 * k, y + 11 * k), max(2, int(3 * k)))
+        pygame.draw.line(s, (220, 220, 210), (x + 18 * k, y - 11 * k), (x + 8 * k, y), 1)
+        pygame.draw.line(s, (220, 220, 210), (x + 18 * k, y + 11 * k), (x + 8 * k, y), 1)
+        pygame.draw.line(s, (200, 200, 210), (x + 8 * k, y), (x + 26 * k, y), 1)
+    else:
+        peca(R(0, -2, COMP_ARMA.get(arma, 16), 4), aco)
+    return COMP_ARMA.get(arma, 16)
+
 
 
 # ------------------------------------------------------------------ construcoes

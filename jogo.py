@@ -1041,7 +1041,15 @@ class Jogo:
         self.estado = "mochila"
         self.som("clique", 0.4)
 
+    def zumbi_no_mouse(self, pos):
+        """Tem zumbi bem embaixo da setinha? Entao o clique e tiro, mesmo em cima da barra."""
+        wx = pos[0] + self.cam[0] - W / 2
+        wy = pos[1] + self.cam[1] - H / 2
+        return any((z.x - wx) ** 2 + (z.y - wy) ** 2 < (z.r + 22) ** 2 for z in self.zumbis)
+
     def mouse_no_hud(self, pos):
+        if self.estado == "jogo" and self.zumbi_no_mouse(pos):
+            return False
         for r, _ in getattr(self, "rects_rapidos", ()):
             if r.collidepoint(pos):
                 return True
@@ -1057,6 +1065,8 @@ class Jogo:
 
     def cliques_hud(self):
         pos = pygame.mouse.get_pos() if self.fake is None else self.fake["mouse"]
+        if self.zumbi_no_mouse(pos):
+            return False
         rb = getattr(self, "rect_botao_mochila", None)
         if rb and rb.collidepoint(pos):
             self.abrir_mochila()
@@ -2268,7 +2278,15 @@ class Jogo:
                     self.ferir_zumbi(z, a["dano"] * random.uniform(0.85, 1.15), ang)
                     self.som("golpe", 0.6)
                     acertos += 1
-                    if acertos >= (2 if a["id"] == "machado" else 1):
+                    if a.get("empurra") and z.tipo != "gigante":  # taco: joga o zumbi para tras
+                        for _ in range(6):
+                            nx, ny = z.x + math.cos(ang) * 7, z.y + math.sin(ang) * 7
+                            if self.mundo.bloqueado(nx, ny, z.r):
+                                break
+                            z.x, z.y = nx, ny
+                        z.t_ataque = max(z.t_ataque, 0.8)
+                        self.tremor = max(self.tremor, 4)
+                    if acertos >= (2 if a["id"] in ("machado", "taco") else 1):
                         break
             if a["ruido"]:
                 self.fazer_barulho(p.x, p.y, a["ruido"])
@@ -2671,13 +2689,13 @@ class Jogo:
         esc = self.escuridao()
         # quantos zumbis a regiao aguenta (regiao calma = nenhum)
         dl = self.dens_local()
-        alvo = round((2 + min(self.dia * 0.4, 10) + 4 * esc) * dl)
+        alvo = round((3 + min(self.dia * 0.2, 4) + 2 * esc) * dl)
         # cidades e vilas tem zumbi andando pelas ruas, de dia tambem (a regiao calma do comeco continua calma)
         cid = m.cidade_perto(p.x, p.y, 1.3)
         na_cidade = cid is not None and m.densidade(p.x, p.y) > 0
         if na_cidade:
             base = 7 if cid["tipo"] == "cidade" else 4
-            alvo = max(alvo, round(base + min(self.dia * 0.4, 6) + 3 * esc))
+            alvo = max(alvo, round(base + min(self.dia * 0.2, 3) + 1 * esc))
         if self.resgate is not None:
             alvo = 22
         seguro = self.em_zona_segura(p.x, p.y)
