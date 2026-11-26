@@ -548,17 +548,17 @@ class Jogo:
             return
         self.texto("SEUS MUNDOS", (W // 2, 54), self.f_titulo, (225, 70, 55), centro=True)
         mundos = self.listar_mundos()
-        caixa = pygame.Rect(W // 2 - 380, 104, 760, 400)
+        caixa = pygame.Rect(W // 2 - 380, 100, 760, 336)
         self.painel(caixa, 200)
         if not mundos:
             self.texto("Você ainda não tem nenhum mundo. Crie um aí embaixo!", (W // 2, caixa.centery), self.f_med2,
                        (210, 200, 190), centro=True)
         mouse = pygame.mouse.get_pos()
-        for i, (arq, nome, dia, mortes, _) in enumerate(mundos[:6]):
+        for i, (arq, nome, dia, mortes, _) in enumerate(mundos[:5]):
             r = pygame.Rect(caixa.x + 16, caixa.y + 14 + i * 64, caixa.w - 32, 56)
             pygame.draw.rect(self.tela, (52, 40, 34) if r.collidepoint(mouse) else (34, 30, 28), r, border_radius=10)
             G.desenha_icone(self.tela, "mochila3", r.x + 30, r.centery, 1.3)
-            self.texto(nome, (r.x + 60, r.y + 6), self.f_med, (240, 225, 200))
+            self.texto(nome if len(nome) <= 34 else nome[:33] + "…", (r.x + 60, r.y + 6), self.f_med, (240, 225, 200))
             self.texto(f"Dia {dia}   ·   {mortes} zumbis derrubados", (r.x + 60, r.y + 31), self.f_peq, (190, 180, 170))
             if self.botao_peq("Jogar", pygame.Rect(r.right - 230, r.y + 10, 110, 36), (60, 90, 50)):
                 self.comecar_carga(self.carregar_passos(arq))
@@ -574,24 +574,45 @@ class Jogo:
                     self.apagar_qual = None
                 else:
                     self.apagar_qual = arq
-        if len(mundos) > 6:
-            self.texto(f"(+{len(mundos) - 6} mundos mais antigos)", (W // 2, caixa.bottom - 16), self.f_peq,
+        if len(mundos) > 5:
+            self.texto(f"(+{len(mundos) - 5} mundos mais antigos)", (W // 2, caixa.bottom - 16), self.f_peq,
                        (170, 160, 150), centro=True)
         # mundo novo com nome
         nome = self.__dict__.get("nome_novo", "")
         if pygame.K_BACKSPACE in self.teclas:
             nome = nome[:-1]
         elif self.letras and pygame.K_RETURN not in self.teclas:
-            nome = (nome + self.letras)[:22]
+            nome = (nome + self.letras)[:200]
         self.nome_novo = nome
-        self.texto("MUNDO NOVO  ·  escreva o nome dele:", (W // 2 - 380, 524), self.f_med, (255, 220, 140))
-        campo = pygame.Rect(W // 2 - 380, 556, 500, 50)
+        self.texto("MUNDO NOVO  ·  escreva o nome dele:", (W // 2 - 380, 446), self.f_med, (255, 220, 140))
+        # campo grande: cabem 3 linhas de nome
+        campo = pygame.Rect(W // 2 - 380, 476, 500, 116)
         pygame.draw.rect(self.tela, (20, 18, 18), campo, border_radius=8)
         pygame.draw.rect(self.tela, (200, 150, 90), campo, 2, border_radius=8)
         pisca = "|" if int(time.time() * 2) % 2 == 0 else ""
-        self.texto((nome or "") + pisca if nome else "ex.: Mundo do Leandro" + pisca, (campo.x + 14, campo.y + 12),
-                   self.f_med2, (240, 235, 225) if nome else (120, 115, 110))
-        criar = self.botao_peq("Criar mundo", pygame.Rect(campo.right + 12, campo.y + 2, 248, 46), (60, 90, 50))
+        txt = nome + pisca if nome else "ex.: Mundo do Leandro" + pisca
+        linhas, atual = [], ""
+        for palavra in txt.split(" "):
+            teste = (atual + " " + palavra).strip() if atual else palavra
+            while self.f_med2.size(teste)[0] > campo.w - 28 and len(teste) > 1:
+                if not atual:  # palavra comprida demais: corta no meio
+                    corte = len(teste) - 1
+                    while corte > 1 and self.f_med2.size(teste[:corte])[0] > campo.w - 28:
+                        corte -= 1
+                    linhas.append(teste[:corte])
+                    teste = teste[corte:]
+                else:
+                    linhas.append(atual)
+                    atual = ""
+                    teste = palavra
+            atual = teste
+        linhas.append(atual)
+        if len(linhas) > 3:  # passou de 3 linhas: nao deixa escrever mais
+            self.nome_novo = nome = nome[:-1] if nome else nome
+            linhas = linhas[:3]
+        for k, ln in enumerate(linhas[:3]):
+            self.texto(ln, (campo.x + 14, campo.y + 8 + k * 34), self.f_med2, (240, 235, 225) if nome else (120, 115, 110))
+        criar = self.botao_peq("Criar mundo", pygame.Rect(campo.right + 12, campo.y + 34, 248, 46), (60, 90, 50))
         if criar or (pygame.K_RETURN in self.teclas):
             nome_final = nome.strip() or f"Mundo {len(mundos) + 1}"
             self.arq = self.arquivo_novo()
@@ -602,7 +623,7 @@ class Jogo:
                 self.salvar()
             self.comecar_carga(criar())
             return
-        if self.botao("Voltar", W // 2, 640, w=220):
+        if self.botao("Voltar", W // 2, 620, w=220):
             self.estado = "menu"
 
     def comecar_carga(self, passos):
