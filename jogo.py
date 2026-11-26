@@ -2687,7 +2687,7 @@ class Jogo:
                     break
                 ang = math.atan2(z.y - p.y, z.x - p.x)
                 dif = abs((ang - p.ang + math.pi) % (2 * math.pi) - math.pi)
-                if dif < 0.95:
+                if dif < 0.95 or (d < p.r + z.r + 8 and dif < 1.7):  # colado de lado tambem leva
                     self.ferir_zumbi(z, a["dano"] * random.uniform(0.85, 1.15), ang)
                     self.som("golpe", 0.6)
                     acertos += 1
@@ -2722,23 +2722,29 @@ class Jogo:
         oy = p.y + math.sin(p.ang) * 22
         for _ in range(a["balas"]):
             ang = p.ang + random.gauss(0, disp)
-            fim = a["alcance"] if self.telhado_b else self.mundo.bala_para(ox, oy, ang, a["alcance"])
+            # a conta do tiro comeca no CENTRO do personagem (antes comecava no cano, e o zumbi grudado
+            # em voce ficava "atras" do cano e a bala passava direto)
+            fim = a["alcance"] if self.telhado_b else self.mundo.bala_para(p.x, p.y, ang, a["alcance"])
             dx = math.cos(ang)
             dy = math.sin(ang)
             alvos = []
             for z in self.zumbis:
-                rx = z.x - ox
-                ry = z.y - oy
+                rx = z.x - p.x
+                ry = z.y - p.y
                 tt = rx * dx + ry * dy
-                if 0 < tt < fim:
+                colado = (rx * rx + ry * ry < (p.r + z.r + 16) ** 2 and
+                          abs((math.atan2(ry, rx) - p.ang + math.pi) % (2 * math.pi) - math.pi) < 1.2)
+                if colado:  # zumbi grudado na sua frente: o tiro pega sempre
+                    alvos.append((max(1.0, tt), z))
+                elif -z.r < tt < fim:
                     perp = abs(rx * dy - ry * dx)
                     if perp < z.r + 3:
-                        alvos.append((tt, z))
+                        alvos.append((max(1.0, tt), z))
             alvos.sort(key=lambda q: q[0])
             fim_vis = fim
             if a.get("explode"):
                 t_imp = alvos[0][0] if alvos else fim
-                ix, iy = ox + dx * t_imp, oy + dy * t_imp
+                ix, iy = p.x + dx * t_imp, p.y + dy * t_imp
                 self.rastros.append([ox, oy, ix, iy, 0.12])
                 self.explodir(ix, iy, a["dano"])
                 continue
@@ -2746,10 +2752,10 @@ class Jogo:
                 queda = 1.0 - 0.6 * (tt / a["alcance"]) if a["id"] == "espingarda" else 1.0
                 self.ferir_zumbi(z, a["dano"] * queda * random.uniform(0.9, 1.1), ang)
                 fim_vis = tt
-            self.rastros.append([ox, oy, ox + dx * fim_vis, oy + dy * fim_vis, 0.06])
+            self.rastros.append([ox, oy, p.x + dx * max(fim_vis, 22), p.y + dy * max(fim_vis, 22), 0.06])
             if not alvos and fim < a["alcance"]:
                 for _ in range(3):
-                    self.particula(ox + dx * fim, oy + dy * fim, random.uniform(-60, 60), random.uniform(-60, 60), 0.25,
+                    self.particula(p.x + dx * fim, p.y + dy * fim, random.uniform(-60, 60), random.uniform(-60, 60), 0.25,
                                    (230, 220, 160), 2)
         # capsula
         pa = p.ang + math.pi / 2
