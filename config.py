@@ -50,6 +50,9 @@ ITENS = {
     "silenciador": "Silenciador",
     "flecha": "Flechas",
     "galao": "Galão de gasolina",
+    "colete": "Colete",
+    "capacete": "Capacete",
+    "calca": "Calça reforçada",
     "lanterna1": "Lanterna boa",
     "lanterna2": "Lanterna tática",
     "lanterna3": "Holofote militar",
@@ -76,6 +79,7 @@ ITENS = {
     "mochila2": "Mochila de trilha",
     "mochila3": "Mochila militar",
     "mochila4": "Mochila tática grande",
+    "mochila5": "Mochilão de expedição",
     "faca": "Faca",
     "machado": "Machado",
     "pistola": "Pistola",
@@ -135,6 +139,7 @@ LANTERNAS = [("Lanterna velha", 330, 0.34, True), ("Lanterna boa", 480, 0.42, Fa
 FABRICAR = [
     ("colete", "Colete de sucata", "Você leva quase metade do dano dos zumbis.", {"sucata": 12, "ferramentas": 2}),
     ("capacete", "Capacete", "Bem menos chance de sangrar ou quebrar osso.", {"sucata": 6, "ferramentas": 1}),
+    ("calca", "Calça reforçada", "Quase nunca quebra a perna e leva menos dano.", {"sucata": 5, "tabua": 2}),
     ("flechas", "10 flechas", "Munição da besta.", {"tabua": 2, "sucata": 1}),
 ]
 # o que da para construir na base direto da bancada
@@ -201,7 +206,7 @@ DIAS_ESTACAO = 6
 # (nome, espaco, cor) por nivel; nivel 0 = so os bolsos
 MOCHILAS = [("Bolsos", 30, (90, 90, 90)), ("Mochila escolar", 80, (60, 110, 190)),
             ("Mochila de trilha", 150, (200, 120, 40)), ("Mochila militar", 250, (80, 110, 60)),
-            ("Mochila tática grande", 390, (40, 44, 40))]
+            ("Mochila tática grande", 390, (40, 44, 40)), ("Mochilão de expedição", 600, (150, 40, 34))]
 
 RECEITAS = [
     dict(id="barricada", nome="Barricada", custo={"tabua": 4}),

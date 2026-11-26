@@ -458,6 +458,27 @@ def _desenha_icone_bruto(s, item, x, y, k=1.0):
         for i in range(n + 1):
             pygame.draw.line(s, (255, 240, 150), (x + (comp // 2 + 6) * k, y), (x + (comp // 2 + 12 + i * 3) * k,
                              y + (i - n / 2) * 4 * k), 1)
+    elif item == "colete":
+        pygame.draw.polygon(s, (14, 14, 16), [(x - 10 * k, y - 10 * k), (x + 10 * k, y - 10 * k), (x + 11 * k, y + 11 * k),
+                                              (x - 11 * k, y + 11 * k)])
+        pygame.draw.polygon(s, (70, 84, 56), [(x - 9 * k, y - 9 * k), (x + 9 * k, y - 9 * k), (x + 10 * k, y + 10 * k),
+                                              (x - 10 * k, y + 10 * k)])
+        pygame.draw.rect(s, (14, 14, 16), R(-3, -10, 6, 6))
+        for yy in (-2, 4):
+            pygame.draw.rect(s, (50, 60, 40), R(-8, yy, 16, 3))
+    elif item == "capacete":
+        pygame.draw.circle(s, (14, 14, 16), (x, y), int(11 * k))
+        pygame.draw.circle(s, (78, 92, 60), (x, y), int(10 * k))
+        pygame.draw.circle(s, (110, 126, 86), (x - int(3 * k), y - int(3 * k)), int(4 * k))
+        pygame.draw.rect(s, (40, 46, 32), R(-11, 3, 22, 3))
+    elif item == "calca":
+        for lado in (-1, 1):
+            pygame.draw.polygon(s, (14, 14, 16), [(x, y - 10 * k), (x + lado * 10 * k, y - 10 * k),
+                                                  (x + lado * 9 * k, y + 12 * k), (x + lado * 2 * k, y + 12 * k)])
+            pygame.draw.polygon(s, (60, 70, 90), [(x, y - 9 * k), (x + lado * 9 * k, y - 9 * k),
+                                                  (x + lado * 8 * k, y + 11 * k), (x + lado * 3 * k, y + 11 * k)])
+            pygame.draw.rect(s, (90, 100, 70), R(lado * 6 - 3, 1, 6, 4))
+        pygame.draw.rect(s, (40, 30, 24), R(-10, -10, 20, 3))
     elif item == "seringa":
         pygame.draw.line(s, (200, 200, 210), (x - 11 * k, y + 8 * k), (x + 6 * k, y - 9 * k), max(1, int(6 * k)))
         pygame.draw.line(s, (240, 60, 70), (x - 8 * k, y + 5 * k), (x + 3 * k, y - 6 * k), max(1, int(3 * k)))

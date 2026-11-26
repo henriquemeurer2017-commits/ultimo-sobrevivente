@@ -785,6 +785,7 @@ class Jogo:
         self.vel_carro = 0.0
         self.colete = 0.0
         self.capacete = 0.0
+        self.calca = 0.0
         self.luneta = False
         self.miras = []
         self.reforco_mochila = 0
@@ -864,7 +865,7 @@ class Jogo:
             explorado=self.explorado.hex(), lanterna=self.lanterna, nivel_mochila=self.nivel_mochila,
             feridas=[self.p.sangrando, self.p.perna, self.p.braco],
             niveis=self.niveis, miras=self.miras, reforco_mochila=self.reforco_mochila,
-            colete=self.colete, capacete=self.capacete, nivel_lanterna=self.nivel_lanterna,
+            colete=self.colete, capacete=self.capacete, calca=self.calca, nivel_lanterna=self.nivel_lanterna,
             cao=dict(x=self.cao["x"], y=self.cao["y"], amigo=self.cao["amigo"]) if self.cao else None,
             carros=[[i, round(c["x"], 1), round(c["y"], 1), round(c["ang"], 1), c.get("gas", 0)]
                     for i, c in enumerate(m.carros) if c.get("mexeu")],
@@ -936,6 +937,7 @@ class Jogo:
             if i < len(m.carros):
                 self.estacionar(m.carros[i], x_, y_, a_, g_, tirar=True)
         self.capacete = d.get("capacete", 0.0)
+        self.calca = d.get("calca", 0.0)
         self.miras = d.get("miras", [])
         self.reforco_mochila = d.get("reforco_mochila", 0)
         self.dono = d.get("dono", False)  # o modo dono vale so neste mundo
@@ -1106,6 +1108,15 @@ class Jogo:
             if avisar:
                 self.msg("Silenciador guardado: vai na próxima arma que você achar.", (180, 230, 255))
             return
+        if item in ("colete", "capacete", "calca"):
+            atual = getattr(self, item)
+            if atual >= 100:
+                if avisar:
+                    self.msg(f"Achou um(a) {ITENS[item].lower()}, mas o seu ainda está novo.", (190, 185, 175))
+                return 0
+            setattr(self, item, 100.0)
+            self.msg(f"Vestiu: {ITENS[item]}! Mais proteção contra os zumbis.", (170, 220, 255))
+            return 0
         if item.startswith("lanterna") and item[8:].isdigit():
             n = int(item[8:])
             if n > self.nivel_lanterna:
@@ -1228,6 +1239,8 @@ class Jogo:
             self.msg("Você foi mordido e está SANGRANDO! Use uma bandagem (H).", (255, 110, 100))
         elif r < 0.26:
             if random.random() < 0.5 and not p.perna:
+                if self.calca > 0 and random.random() < 0.85:  # a calca protegeu a perna
+                    return
                 p.perna = True
                 self.msg("Sua PERNA quebrou! Você anda devagar. Use um kit médico (J).", (255, 180, 100))
             elif not p.braco:
@@ -1773,6 +1786,8 @@ class Jogo:
                 if self.pagar(custo):
                     if id_ == "colete":
                         self.colete = 100.0
+                    elif id_ == "calca":
+                        self.calca = 100.0
                     elif id_ == "capacete":
                         self.capacete = 100.0
                     elif id_ == "flechas":
@@ -3276,6 +3291,11 @@ class Jogo:
                     and not self.dirigindo:
                 z.t_ataque = {"gordo": 1.4, "corredor": 0.7, "gigante": 1.7}.get(z.tipo, 1.0)
                 dano_z = z.dano
+                if self.calca > 0:  # a calca reforcada segura um pouco
+                    dano_z *= 0.85
+                    self.calca = max(0.0, self.calca - z.dano * 0.4)
+                    if self.calca <= 0:
+                        self.msg("Sua CALÇA reforçada rasgou!", (255, 170, 120))
                 if self.colete > 0:  # o colete segura boa parte da mordida
                     dano_z *= 0.55
                     self.colete = max(0.0, self.colete - z.dano * 0.8)
@@ -4316,10 +4336,9 @@ class Jogo:
             g = self.dirigindo.get("gas", 0)
             self.texto(f"CARRO  ·  gasolina {int(g)}%  ·  {int(abs(self.vel_carro) / 4)} km/h  ·  E sai",
                        (W // 2, 120), self.f_med, (255, 120, 100) if g < 10 else (255, 230, 160), centro=True)
-        prot = [t for t, v in (("Colete", self.colete), ("Capacete", self.capacete)) if v > 0]
+        prot = [(t, v) for t, v in (("Colete", self.colete), ("Capacete", self.capacete), ("Calça", self.calca)) if v > 0]
         if prot:
-            self.texto("  ·  ".join(f"{t} {int(v)}%" for t, v in (("Colete", self.colete), ("Capacete", self.capacete))
-                                    if v > 0), (24, 96), self.f_peq, (170, 220, 255))
+            self.texto("  ·  ".join(f"{t} {int(v)}%" for t, v in prot), (24, 96), self.f_peq, (170, 220, 255))
         self.texto(f"zumbis: {self.mortes}", (380, 24), self.f_peq, (200, 170, 160))
         self.painel(pygame.Rect(W - 207, 238, 194, 34))
         pygame.draw.circle(tela, (120, 90, 20), (W - 186, 255), 10)

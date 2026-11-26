@@ -512,6 +512,31 @@ class Mundo:
                 mv["itens"].append(["lanterna2", 1])
             elif mv["tipo"] == "vitrine" and r < 0.5:
                 mv["itens"].append(["lanterna2", 1])
+        # o MOCHILAO DE EXPEDICAO tambem fica numa vitrine do shopping
+        vitrines = [mv for mv in self.moveis if mv["tipo"] == "vitrine"]
+        if vitrines:
+            vitrines[0]["itens"].append(["mochila5", 1])
+        # roupas de protecao: colete, capacete e calca reforcada
+        for mv in self.moveis:
+            r = rnd.random()
+            if mv["tipo"] in ("armario", "gaveta"):
+                if r < 0.03:
+                    mv["itens"].append(["colete", 1])
+                elif r < 0.07:
+                    mv["itens"].append(["capacete", 1])
+                elif r < 0.12:
+                    mv["itens"].append(["calca", 1])
+            elif mv["tipo"] == "militar":
+                if r < 0.25:
+                    mv["itens"].append(["colete", 1])
+                elif r < 0.45:
+                    mv["itens"].append(["capacete", 1])
+                elif r < 0.6:
+                    mv["itens"].append(["calca", 1])
+            elif mv["tipo"] == "porta_malas" and r < 0.04:
+                mv["itens"].append(["capacete", 1])
+            elif mv["tipo"] == "prateleira" and (mv.get("predio") or {}).get("tipo") == "shopping" and r < 0.35:
+                mv["itens"].append(["calca" if r < 0.2 else "colete", 1])
         # seringas rarissimas nos hospitais
         medicos = [mv for mv in self.moveis if mv["tipo"] == "medico" and (mv.get("predio") or {}).get("tipo") != "militar"]
         rnd.shuffle(medicos)
@@ -559,6 +584,8 @@ class Mundo:
             arsenal.append(["mochila2" if i == 0 else ("mochila3" if i in (1, 3) else "mochila4"), 1])
             if i >= 3:  # o HOLOFOTE MILITAR fica nos ultimos bunkers
                 arsenal.append(["lanterna3", 1])
+            if i == len(self.bunkers) - 1:  # o MOCHILAO DE EXPEDICAO (a maior de todas) no ultimo bunker
+                arsenal.append(["mochila5", 1])
             self.moveis.append(dict(
                 id=len(self.moveis), x=(x + 6) * T + 30, y=(y + h - 2) * T + 14, tipo="arsenal", aberto=False, predio=b,
                 itens=arsenal))

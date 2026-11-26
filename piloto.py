@@ -173,21 +173,36 @@ class Piloto:
         if p.vida < 30 and inv.get("seringa", 0) > 0:
             j.usar("seringa")
 
-    def melhor_arma(self, d):
+    def melhor_arma(self, d, z=None):
+        """Escolhe a arma pela distancia e varia: cada zumbi novo pode ser com uma arma diferente."""
         j = self.j
-        for ida in PRIORIDADE_ARMAS:
+        if d < 75:
+            lista = ["katana", "facao", "machado", "taco", "faca"]
+        elif d < 200:
+            lista = ["dragao", "espingarda", "smg", "revolver", "pistola", "minigun"]
+        elif d < 320:
+            lista = ["fuzil", "smg", "revolver", "besta", "minigun", "pistola"]
+        else:
+            lista = ["dourado", "rifle", "besta", "fuzil"]
+
+        def tem(ida):
             if ida not in j.armas:
-                continue
+                return False
             a = j.arma_melhorada(ida)
-            if j.pente.get(ida, 0) <= 0 and j.inv.get(a["mun"], 0) <= 0:
-                continue
-            if ida == "espingarda" and d > 300:
-                continue
-            return ida
-        for ida in ("facao", "machado", "taco", "faca"):
-            if ida in j.armas:
-                return ida
-        return j.armas[0]
+            return a["melee"] or j.pente.get(ida, 0) > 0 or j.inv.get(a["mun"], 0) > 0
+
+        boas = [i for i in lista if tem(i)]
+        if z is not None and getattr(self, "zumbi_da_vez", None) is z and getattr(self, "arma_da_vez", None) in boas:
+            return self.arma_da_vez  # continua com a mesma arma ate acabar com esse zumbi
+        if boas:
+            import random
+            escolha = random.choice(boas[:3])
+        else:
+            outras = [i for i in ("fuzil", "smg", "espingarda", "revolver", "pistola", "besta", "rifle") if tem(i)]
+            escolha = outras[0] if outras else next((i for i in ("facao", "machado", "taco", "faca") if i in j.armas),
+                                                    j.armas[0])
+        self.zumbi_da_vez, self.arma_da_vez = z, escolha
+        return escolha
 
     def lutar(self):
         j = self.j
@@ -199,7 +214,7 @@ class Piloto:
             return None
         z = min(perigo, key=lambda z: (z.x - p.x) ** 2 + (z.y - p.y) ** 2)
         d = math.hypot(z.x - p.x, z.y - p.y)
-        arma = self.melhor_arma(d)
+        arma = self.melhor_arma(d, z)
         if arma != j.arma:
             j.trocar_arma(arma)
         a = j.arma_atual()
@@ -231,13 +246,15 @@ class Piloto:
                 return (0.0, 0.0), False
             return self.ir_para(alvo, dt), False
         if tipo == "revistar":
-            if obj["aberto"]:
+            tent = self.__dict__.setdefault("tentativas", {})
+            if obj["aberto"] or tent.get(id(obj), 0) >= 2:  # aberto, ou mochila cheia: segue em frente
                 self.tarefas.pop(0)
                 self.caminho = []
                 return (0.0, 0.0), False
             alvo = self.ponto_do_movel(obj)
             if math.hypot(alvo[0] - p.x, alvo[1] - p.y) < 14:
                 al = j.alvo_interacao()
+                tent[id(obj)] = tent.get(id(obj), 0) + 1
                 if al and al[1] is obj:
                     j.interagir()
                 else:  # outro movel mais perto: revista ele tambem
