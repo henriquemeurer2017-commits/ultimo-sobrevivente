@@ -155,6 +155,7 @@ class Jogo:
         self.spr_abrigo = G.sprite_abrigo()
         self.spr_bancada = G.sprite_bancada()
         self.spr_escada = G.sprite_escada()
+        self.spr_cao = [G.sprite_cachorro(0), G.sprite_cachorro(1)]
         self.mascara_luneta = G.luneta_mascara(230)
         self.spr_muro = G.sprite_muro()
         self.spr_portao = G.sprite_portao(False)
@@ -539,6 +540,15 @@ class Jogo:
         if self.botao("Sair", W // 2, y):
             self.sair()
         rec = self.recorde
+        if NAVEGADOR:
+            try:
+                import platform
+                qtd = platform.window.jogadoresTotal
+                if qtd:
+                    self.texto(f"{int(qtd)} jogadores já jogaram o Último Sobrevivente", (W // 2, H - 72), self.f_med2,
+                               (255, 210, 120), centro=True)
+            except Exception:
+                pass
         self.texto(f"Recorde: {rec.get('dias', 0)} dias  ·  {rec.get('zumbis', 0)} zumbis  ·  resgates: {rec.get('resgates', 0)}",
                    (W // 2, H - 40), self.f_peq, (170, 160, 150), centro=True)
 
@@ -754,6 +764,7 @@ class Jogo:
         self.niveis = {}
         self.telhado_b = None   # predio em cujo telhado voce esta
         self.dirigindo = None   # carro que voce esta dirigindo
+        self.cao = None         # o cachorro: {x, y, amigo, ang, t_mordida, t_latido, au}
         self.vel_carro = 0.0
         self.colete = 0.0
         self.capacete = 0.0
@@ -809,6 +820,7 @@ class Jogo:
         self.revelados = [0] if m.bunkers else []
         self.cam = [self.p.x, self.p.y]
         self.estado = "jogo"
+        self.criar_cachorro()
         self.msg("Você acordou sozinho. O mundo acabou.", (240, 220, 200))
         self.msg("Revista as casas (E). Ache água, comida e armas.", (200, 220, 240))
         self.msg("No seu bolso: um bilhete com a posição de um bunker militar (M).", (200, 240, 200))
@@ -836,6 +848,7 @@ class Jogo:
             feridas=[self.p.sangrando, self.p.perna, self.p.braco],
             niveis=self.niveis, miras=self.miras, reforco_mochila=self.reforco_mochila,
             colete=self.colete, capacete=self.capacete,
+            cao=dict(x=self.cao["x"], y=self.cao["y"], amigo=self.cao["amigo"]) if self.cao else None,
             carros=[[i, round(c["x"], 1), round(c["y"], 1), round(c["ang"], 1), c.get("gas", 0)]
                     for i, c in enumerate(m.carros) if c.get("mexeu")],
             moedas=self.moedas, dono=self.dono, mochila_infinita=self.mochila_infinita,
@@ -895,6 +908,12 @@ class Jogo:
         self.nivel_mochila = d.get("nivel_mochila", 0)
         self.niveis = d.get("niveis", {})
         self.colete = d.get("colete", 0.0)
+        if d.get("cao"):
+            self.cao = dict(d["cao"], ang=0.0, t_mordida=0.0, t_latido=0.0, au=0.0, t_aviso=0.0, passo=0.0)
+            if self.cao["amigo"]:
+                self.cao["x"], self.cao["y"] = self.p.x + 40, self.p.y + 30
+        else:
+            self.criar_cachorro()
         for i, x_, y_, a_, g_ in d.get("carros", []):
             if i < len(m.carros):
                 self.estacionar(m.carros[i], x_, y_, a_, g_, tirar=True)
@@ -1449,7 +1468,8 @@ class Jogo:
         p = self.p
         if cmd == "ajuda":
             for linha in ("tudo  ·  moedas 1000  ·  curar  ·  noite  ·  dia  ·  dia 10  ·  desligar (volta ao normal)",
-                          "gigante  ·  zumbis 5  ·  bunker 2 (te leva no bunker 2)  ·  limpar (some com os zumbis)"):
+                          "gigante  ·  zumbis 5  ·  bunker 2 (te leva no bunker 2)  ·  limpar (some com os zumbis)",
+                          "caixa 2 (te leva na caixa da peça do bunker 2)  ·  torre (te leva na torre de rádio)"):
                 self.msg(linha, (255, 200, 240))
         elif cmd == "tudo":
             self.tudo_do_melhor()
@@ -1482,6 +1502,23 @@ class Jogo:
                 t = tipo or random.choice(["normal", "normal", "gordo", "corredor"])
                 self.zumbis.append(Zumbi(x, y, t, random.randrange(len(self.spr_z[t])), random))
             self.msg("Lá vem eles!", (255, 150, 130))
+        elif cmd == "caixa" and num and 1 <= num <= len(self.mundo.bunkers):
+            b = self.mundo.bunkers[num - 1]
+            caixa = next((mv for mv in self.mundo.moveis if mv.get("predio") is b and "revela" in mv), None)
+            if caixa:
+                for ox, oy in ((0, 30), (-30, 0), (0, -30), (30, 0)):
+                    p.x, p.y = caixa["x"] + ox, caixa["y"] + oy
+                    if not self.mundo.bloqueado(p.x, p.y, p.r):
+                        break
+                self.cam = [p.x, p.y]
+                if num - 1 not in self.revelados:
+                    self.revelados.append(num - 1)
+                self.msg(f"Você está do lado da caixa da peça do bunker {num}. Aperte E.", (200, 255, 200))
+        elif cmd == "torre" and self.mundo.torre:
+            t_ = self.mundo.torre
+            p.x, p.y = (t_["x"] + t_["w"] / 2) * T, (t_["y"] + t_["h"] / 2) * T + 70
+            self.cam = [p.x, p.y]
+            self.msg("Você está na torre de rádio. Aperte E para usar o rádio.", (200, 255, 200))
         elif cmd == "limpar":
             self.zumbis = []
             self.msg("Sumiu todo mundo.", (200, 230, 255))
@@ -1843,6 +1880,72 @@ class Jogo:
                 self.matar(z, -a)
         if abs(self.vel_carro) > 60:  # o motor faz barulho
             self.fazer_barulho(c["x"], c["y"], 300 + abs(self.vel_carro))
+
+    # ================================================================ cachorro
+    def criar_cachorro(self):
+        """O Thor fica esperando perto de onde voce comeca."""
+        m = self.mundo
+        p = self.p
+        for k in range(40):
+            a = k * 0.7
+            x, y = p.x + math.cos(a) * 150, p.y + math.sin(a) * 150
+            if not m.bloqueado(x, y, 14):
+                break
+        self.cao = dict(x=x, y=y, amigo=False, ang=0.0, t_mordida=0.0, t_latido=0.0, au=0.0, t_aviso=0.0, passo=0.0)
+
+    def atualizar_cachorro(self, dt):
+        cao = self.cao
+        if not cao:
+            return
+        m = self.mundo
+        p = self.p
+        cao["au"] = max(0.0, cao["au"] - dt)
+        cao["t_mordida"] -= dt
+        cao["t_latido"] -= dt
+        cao["t_aviso"] -= dt
+        if not cao["amigo"]:
+            if math.hypot(cao["x"] - p.x, cao["y"] - p.y) < 300 and cao["t_latido"] <= 0:
+                cao["t_latido"] = 6.0
+                cao["au"] = 0.8
+            return
+        alvo_x, alvo_y, vel = None, None, 0.0
+        # zumbi perto de voce: late e vai morder
+        perigo = [z for z in self.zumbis if (z.x - p.x) ** 2 + (z.y - p.y) ** 2 < 380 ** 2]
+        if perigo:
+            if cao["t_latido"] <= 0:
+                cao["t_latido"] = 2.5
+                cao["au"] = 0.9
+            if cao["t_aviso"] <= 0:
+                cao["t_aviso"] = 25.0
+                self.msg("O Thor está latindo: tem ZUMBI perto!", (255, 220, 140))
+            z = min(perigo, key=lambda z: (z.x - cao["x"]) ** 2 + (z.y - cao["y"]) ** 2)
+            d = math.hypot(z.x - cao["x"], z.y - cao["y"])
+            if d < z.r + 18:
+                if cao["t_mordida"] <= 0:  # MORDIDA
+                    cao["t_mordida"] = 0.75
+                    self.ferir_zumbi(z, 24, math.atan2(z.y - cao["y"], z.x - cao["x"]))
+                    if z.hp <= 0:
+                        self.matar(z, math.atan2(z.y - cao["y"], z.x - cao["x"]))
+                        self.msg("O Thor derrubou um zumbi!", (255, 220, 140))
+            else:
+                alvo_x, alvo_y, vel = z.x, z.y, 230.0
+        else:
+            d = math.hypot(p.x - cao["x"], p.y - cao["y"])
+            if d > 1100:  # ficou muito para tras: aparece do seu lado
+                cao["x"], cao["y"] = p.x + 50, p.y + 40
+            elif d > 70:
+                alvo_x, alvo_y, vel = p.x, p.y, (300.0 if d > 300 or self.dirigindo else 150.0)
+        if alvo_x is not None:
+            a = math.atan2(alvo_y - cao["y"], alvo_x - cao["x"])
+            cao["ang"] = a
+            nx, ny = cao["x"] + math.cos(a) * vel * dt, cao["y"] + math.sin(a) * vel * dt
+            if not m.bloqueado(nx, ny, 10):
+                cao["x"], cao["y"] = nx, ny
+            elif not m.bloqueado(nx, cao["y"], 10):
+                cao["x"] = nx
+            elif not m.bloqueado(cao["x"], ny, 10):
+                cao["y"] = ny
+            cao["passo"] += vel * dt / 14
 
     def capacidade(self):
         if self.mochila_infinita:
@@ -2218,6 +2321,8 @@ class Jogo:
             if d < 46 and d < md:
                 md = d
                 melhor = ("carro", c)
+        if self.cao and not self.cao["amigo"] and math.hypot(self.cao["x"] - p.x, self.cao["y"] - p.y) < 60:
+            return ("cao", self.cao)
         cx_, cy_ = int(p.x // CHPX), int(p.y // CHPX)
         perto_b = [b for yy in (cy_ - 1, cy_, cy_ + 1) for xx in (cx_ - 1, cx_, cx_ + 1) for b in m.pred_ch.get((xx, yy), ())]
         for b in perto_b:
@@ -2292,6 +2397,8 @@ class Jogo:
 
     def texto_interacao(self, alvo):
         tipo, obj = alvo
+        if tipo == "cao":
+            return "[E] Fazer carinho no cachorro (ele vira seu amigo)"
         if tipo == "carro":
             return f"[E] Entrar no carro (gasolina {int(obj.get('gas', 0))}%)"
         if tipo == "sair_carro":
@@ -2337,6 +2444,13 @@ class Jogo:
         if not alvo:
             return
         tipo, obj = alvo
+        if tipo == "cao":
+            obj["amigo"] = True
+            obj["au"] = 1.2
+            self.msg("O THOR agora é seu amigo! Ele te segue, late quando tem zumbi perto e MORDE os zumbis.",
+                     (255, 220, 140))
+            self.salvar()
+            return
         if tipo == "carro":
             self.entrar_carro(obj)
             return
@@ -2796,6 +2910,7 @@ class Jogo:
                 self.som("pegar", 0.5)
         # zumbis
         self.atualizar_zumbis(dt)
+        self.atualizar_cachorro(dt)
         self.tremor = max(0.0, self.tremor - 30 * dt)
         # numeros de dano subindo
         for nmr in self.numeros:
@@ -2835,18 +2950,25 @@ class Jogo:
         if self.t_clima <= 0:
             self.chuva = (not self.chuva) and random.random() < 0.45
             self.t_clima = random.uniform(150, 420) if self.chuva else random.uniform(240, 600)
-            if self.chuva:
+            if self.chuva and self.estacao() == 2:
+                self.msg("Começou a NEVAR! Os zumbis ouvem e enxergam menos.", (220, 235, 255))
+            elif self.chuva:
                 self.msg("Começou a chover. Os zumbis ouvem e enxergam menos.", (170, 200, 230))
-        if self.chuva and self.canal_chuva is None and "chuva" in self.sons:
+        if self.chuva and self.canal_chuva is None and "chuva" in self.sons and self.estacao() != 2:
             self.canal_chuva = self.sons["chuva"].play(loops=-1)
             if self.canal_chuva:
                 self.canal_chuva.set_volume(0.5)
         if not self.chuva and self.canal_chuva is not None:
             self.canal_chuva.stop()
             self.canal_chuva = None
+        neve = self.estacao() == 2
         for g in self.gotas:
-            g[1] += 900 * dt * g[2]
-            g[0] -= 180 * dt * g[2]
+            if neve:  # floco de neve: cai devagar e balanca
+                g[1] += 110 * dt * g[2]
+                g[0] += math.sin(time.time() * 1.5 + g[2] * 9) * 30 * dt
+            else:
+                g[1] += 900 * dt * g[2]
+                g[0] -= 180 * dt * g[2]
             if g[1] > H:
                 g[1] = random.uniform(-40, 0)
                 g[0] = random.uniform(0, W + 200)
@@ -3673,6 +3795,18 @@ class Jogo:
         for c in getattr(m, "bancadas", ()):
             if vis.collidepoint(c["x"], c["y"]):
                 tela.blit(self.spr_bancada, (c["x"] - camx - 32, c["y"] - camy - 20))
+        # o cachorro
+        cao = self.cao
+        if cao and vis.collidepoint(cao["x"], cao["y"]) and not (cao["amigo"] and (self.dirigindo or self.telhado_b)
+                                                                 and math.hypot(cao["x"] - p.x, cao["y"] - p.y) < 30):
+            sx, sy = cao["x"] - camx, cao["y"] - camy
+            tela.blit(self.spr_sombra, (sx - self.spr_sombra.get_width() / 2 + 3, sy - self.spr_sombra.get_height() / 2 + 5))
+            spr = self.rot(("cao", int(cao["passo"]) % 2), self.spr_cao[int(cao["passo"]) % 2], math.degrees(cao["ang"]), 6)
+            tela.blit(spr, (sx - spr.get_width() / 2, sy - spr.get_height() / 2))
+            if cao["au"] > 0:
+                self.texto("AU AU!", (sx, sy - 30), self.f_med, (255, 230, 120), centro=True)
+            elif not cao["amigo"] and math.hypot(cao["x"] - p.x, cao["y"] - p.y) < 400:
+                self.texto("?", (sx, sy - 28), self.f_med, (200, 230, 255), centro=True)
         # zumbis e jogador
         for z in self.zumbis:
             if vis.collidepoint(z.x, z.y):
@@ -3803,9 +3937,14 @@ class Jogo:
         # chuva
         if self.chuva:
             camada = pygame.Surface((W, H), pygame.SRCALPHA)
-            camada.fill((40, 50, 70, 50))
-            for g in self.gotas:
-                pygame.draw.line(camada, (180, 200, 230, 110), (g[0], g[1]), (g[0] - 5 * g[2], g[1] + 18 * g[2]), 1)
+            if self.estacao() == 2:  # NEVE
+                camada.fill((225, 232, 242, 46))
+                for g in self.gotas:
+                    pygame.draw.circle(camada, (255, 255, 255, 220), (int(g[0]), int(g[1])), 1 + int(g[2] * 2.4))
+            else:
+                camada.fill((40, 50, 70, 50))
+                for g in self.gotas:
+                    pygame.draw.line(camada, (180, 200, 230, 110), (g[0], g[1]), (g[0] - 5 * g[2], g[1] + 18 * g[2]), 1)
             tela.blit(camada, (0, 0))
         # luz e escuridao
         self.desenhar_luz(camx, camy, psx, psy)
@@ -4122,7 +4261,7 @@ class Jogo:
             pygame.draw.circle(tela, (20, 22, 28), (45, 34), 10)
         h = int(self.hora)
         mi = int((self.hora - h) * 60) // 10 * 10
-        clima = "  ·  chuva" if self.chuva else ""
+        clima = ("  ·  neve" if self.estacao() == 2 else "  ·  chuva") if self.chuva else ""
         self.texto(f"Dia {self.dia}  ·  {h:02d}:{mi:02d}  ·  {ESTACOES[self.estacao()][0]}{clima}", (64, 22), self.f_med)
         if self.dirigindo:
             g = self.dirigindo.get("gas", 0)

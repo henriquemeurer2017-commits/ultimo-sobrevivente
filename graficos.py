@@ -648,6 +648,28 @@ def sprite_ponte():
     return s
 
 
+def sprite_cachorro(passo=0):
+    """Cachorro visto de cima, virado para a direita. passo 0/1 mexe as patas e o rabo."""
+    s = pygame.Surface((56, 40), pygame.SRCALPHA)
+    pelo, escuro = (150, 100, 52), (98, 62, 30)
+    d = 3 if passo else -3
+    for px, py in ((16, 11 + d), (16, 29 - d), (34, 11 - d), (34, 29 + d)):  # patas
+        pygame.draw.ellipse(s, escuro, (px - 3, py - 3, 7, 6))
+    pygame.draw.line(s, escuro, (12, 20), (3, 20 + d * 2), 4)  # rabo
+    pygame.draw.ellipse(s, escuro, (11, 11, 30, 18))
+    pygame.draw.ellipse(s, pelo, (12, 12, 28, 16))
+    pygame.draw.ellipse(s, (180, 130, 76), (18, 15, 14, 9))
+    pygame.draw.circle(s, escuro, (42, 20), 9)
+    pygame.draw.circle(s, pelo, (42, 20), 8)
+    pygame.draw.ellipse(s, escuro, (36, 9, 8, 7))     # orelhas
+    pygame.draw.ellipse(s, escuro, (36, 24, 8, 7))
+    pygame.draw.ellipse(s, (60, 40, 24), (47, 17, 6, 6))  # focinho
+    pygame.draw.circle(s, (20, 14, 10), (44, 16), 1)
+    pygame.draw.circle(s, (20, 14, 10), (44, 24), 1)
+    pygame.draw.rect(s, (200, 40, 40), (32, 14, 3, 12))   # coleira
+    return contorno(vivo(s, 1.2, 1.05))
+
+
 def sprite_bancada():
     s = pygame.Surface((64, 40), pygame.SRCALPHA)
     pygame.draw.rect(s, (70, 48, 30), (2, 6, 60, 30), border_radius=3)

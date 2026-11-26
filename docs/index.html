@@ -455,6 +455,18 @@ const __timerAjuste = setInterval(() => { ajustarTela(); if (++__ajustes > 30) c
 </script>
 
 <script>
+window.jogadoresTotal = 0;
+(function () {
+    const base = "https://abacus.jasoncameron.dev/";
+    const ja = localStorage.getItem("ultimo_contado");
+    const url = base + (ja ? "get" : "hit") + "/ultimo-sobrevivente-jogo/jogadores";
+    fetch(url).then(r => r.json()).then(d => {
+        if (d && d.value) { window.jogadoresTotal = d.value; if (!ja) localStorage.setItem("ultimo_contado", "1"); }
+    }).catch(() => {});
+})();
+</script>
+
+<script>
 // tela cheia no primeiro clique ou tecla (o navegador so deixa depois de um toque)
 function telaCheia() {
     const el = document.documentElement;

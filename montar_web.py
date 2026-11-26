@@ -48,6 +48,22 @@ const __timerAjuste = setInterval(() => { ajustarTela(); if (++__ajustes > 30) c
 </body>"""
     if "function ajustarTela" not in html:
         html = html.replace("</body>", ajuste, 1)
+    # contador de jogadores: cada navegador conta 1 vez (so guarda um numero, nenhum dado da pessoa)
+    contador = """
+<script>
+window.jogadoresTotal = 0;
+(function () {
+    const base = "https://abacus.jasoncameron.dev/";
+    const ja = localStorage.getItem("ultimo_contado");
+    const url = base + (ja ? "get" : "hit") + "/ultimo-sobrevivente-jogo/jogadores";
+    fetch(url).then(r => r.json()).then(d => {
+        if (d && d.value) { window.jogadoresTotal = d.value; if (!ja) localStorage.setItem("ultimo_contado", "1"); }
+    }).catch(() => {});
+})();
+</script>
+</body>"""
+    if "jogadoresTotal" not in html:
+        html = html.replace("</body>", contador, 1)
     html = html.replace("background-color:powderblue;", "background-color:#000; overflow:hidden;")
     html = html.replace('''            background: green;
             color: blue;''', '''            background: #1a1414;
