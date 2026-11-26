@@ -785,7 +785,7 @@ class Jogo:
         extras = [dict(x=mv["x"], y=mv["y"], tipo=mv["tipo"], itens=mv["itens"], aberto=mv["aberto"])
                   for mv in m.moveis[self.n_moveis_base:] if mv["tipo"] == "mochila" and not mv["aberto"]]
         dados = dict(
-            versao=1, seed=m.seed, x=self.p.x, y=self.p.y, vida=self.p.vida, fome=self.p.fome, sede=self.p.sede,
+            versao=1, tam=N, seed=m.seed, x=self.p.x, y=self.p.y, vida=self.p.vida, fome=self.p.fome, sede=self.p.sede,
             inv=self.inv, armas=self.armas, pente=self.pente, silen=self.silen, arma=self.arma, hora=self.hora,
             dia=self.dia, mortes=self.mortes, vezes_morto=self.vezes_morto, revelados=self.revelados,
             respawn=self.respawn, abertos=[mv["id"] for mv in m.moveis[:self.n_moveis_base] if mv["aberto"]],
@@ -824,6 +824,15 @@ class Jogo:
             return
         yield from self.preparar_passos(d["seed"])
         m = self.mundo
+        cresceu = d.get("tam", 512) != N
+        if cresceu:
+            # o mundo ficou maior: voce comeca no comeco do mapa novo, mas leva suas coisas
+            d["x"], d["y"] = m.inicio
+            d["respawn"] = list(m.inicio)
+            for k_ in ("abertos", "pegos", "cortadas", "construidos", "mochilas"):
+                d[k_] = []
+            d["revelados"] = [0] if m.bunkers else []
+            d["explorado"] = ""
         self.p = Jogador(d["x"], d["y"])
         self.p.vida, self.p.fome, self.p.sede = d["vida"], d["fome"], d["sede"]
         if m.bloqueado(self.p.x, self.p.y, self.p.r):  # o mundo mudou e voce ficou preso: procura um lugar livre
@@ -879,6 +888,10 @@ class Jogo:
         self.cam = [self.p.x, self.p.y]
         self.estado = "jogo"
         self.msg(f"Bem-vindo de volta. Dia {self.dia}.", (240, 220, 200))
+        if cresceu:
+            self.msg("O MUNDO FICOU MAIOR! Mais cidades, a CIDADE GRANDE e o SHOPPING. Suas coisas vieram com você.",
+                     (255, 220, 120))
+            self.salvar()
 
     # ================================================================ utilidades
     def msg(self, txt, cor=(235, 230, 220)):
@@ -1824,7 +1837,14 @@ class Jogo:
             else:
                 volta = self.__dict__.get("arma_guardada")
                 self.trocar_arma(volta if volta in self.armas else self.armas[-1])
+        if pygame.K_t in tc:
+            self.deitado = not self.__dict__.get("deitado", False)
+            if self.deitado:
+                self.agachado = False
+            self.msg("Deitado: quase ninguém te vê, mas você se arrasta bem devagar." if self.deitado else "Levantou.",
+                     (170, 220, 255))
         if pygame.K_c in tc:
+            self.deitado = False
             self.agachado = not self.agachado
             self.msg("Agachado: anda devagar, sem barulho, e os zumbis te veem menos." if self.agachado else "Levantou.",
                      (170, 220, 255))
@@ -2401,6 +2421,9 @@ class Jogo:
         if self.agachado:
             vel = min(vel, 128) * 0.5
             correndo = False
+        if self.__dict__.get("deitado"):
+            vel = min(vel, 128) * 0.3
+            correndo = False
         if p.perna:
             vel = min(vel, 128) * 0.62
             correndo = False
@@ -2689,12 +2712,12 @@ class Jogo:
         esc = self.escuridao()
         # quantos zumbis a regiao aguenta (regiao calma = nenhum)
         dl = self.dens_local()
-        alvo = round((3 + min(self.dia * 0.2, 4) + 2 * esc) * dl)
+        alvo = round((6 + min(self.dia * 0.1, 2) + 1 * esc) * min(1.0, dl * 2.5))
         # cidades e vilas tem zumbi andando pelas ruas, de dia tambem (a regiao calma do comeco continua calma)
         cid = m.cidade_perto(p.x, p.y, 1.3)
         na_cidade = cid is not None and m.densidade(p.x, p.y) > 0
         if na_cidade:
-            base = 7 if cid["tipo"] == "cidade" else 4
+            base = {"metropole": 14, "cidade": 9}.get(cid["tipo"], 7)
             alvo = max(alvo, round(base + min(self.dia * 0.2, 3) + 1 * esc))
         if self.resgate is not None:
             alvo = 22
@@ -2722,6 +2745,8 @@ class Jogo:
             visao *= 0.35
         if self.agachado:
             visao *= 0.55
+        if self.__dict__.get("deitado"):
+            visao *= 0.3
         zonas = list(self.zonas_seguras())
         self.arames = [c for c in self.construidos if c["tipo"] == "arame"]
         remover = []
@@ -3055,8 +3080,7 @@ class Jogo:
         self.tela.fill((14, 16, 20))
         S = 660
         if self.mapa_grande is None:
-            base = m.mapa.copy()
-            base.blit(self.fog, (0, 0))
+            base = m.mapa.copy()  # o mapa mostra o mundo inteiro
             self.mapa_grande = pygame.transform.smoothscale(base, (S, S))
         ox = (W - S) // 2 - 150
         oy = (H - S) // 2
@@ -3073,12 +3097,22 @@ class Jogo:
 
         for c in m.cidades:
             x, y = c["x"] * T, c["y"] * T
-            if explorado(x, y):
-                self.texto(c["nome"], P(x, y - c["raio"] * T - 30), self.f_peq, (240, 235, 220), centro=True)
+            cor = {"metropole": (255, 140, 110), "cidade": (255, 230, 170)}.get(c["tipo"], (220, 225, 215))
+            fonte = self.f_med if c["tipo"] != "vila" else self.f_peq
+            nome = c["nome"].upper() if c["tipo"] == "metropole" else c["nome"]
+            self.texto(nome, P(x, y - c["raio"] * T - 26), fonte, cor, centro=True)
+        for b in m.construcoes:
+            if b["tipo"] in ("shopping", "mercado", "gas"):
+                px, py = P((b["x"] + b["w"] / 2) * T, (b["y"] + b["h"] / 2) * T)
+                cor, letra = {"shopping": ((150, 90, 220), "S"), "mercado": ((60, 130, 210), "M"),
+                              "gas": ((230, 160, 30), "P")}[b["tipo"]]
+                pygame.draw.circle(self.tela, (0, 0, 0), (px, py), 8)
+                pygame.draw.circle(self.tela, cor, (px, py), 7)
+                self.texto(letra, (px, py), self.f_peq, (255, 255, 255), centro=True, sombra=False)
         for b in m.construcoes:
             x = (b["x"] + b["w"] / 2) * T
             y = (b["y"] + b["h"] / 2) * T
-            if b["tipo"] in ("hospital", "posto") and explorado(x, y):
+            if b["tipo"] in ("hospital", "posto"):
                 px, py = P(x, y)
                 pygame.draw.rect(self.tela, (255, 255, 255), (px - 7, py - 7, 14, 14))
                 pygame.draw.rect(self.tela, (220, 30, 30), (px - 2, py - 5, 4, 10))
@@ -3144,7 +3178,7 @@ class Jogo:
         pecas = self.inv.get("peca", 0)
         self.texto(f"Peças do rádio: {pecas}/{PECAS_RADIO}", (lx, y), self.f_med, (255, 220, 140))
         self.texto(f"Dia {self.dia}  ·  {self.mortes} zumbis", (lx, y + 34), self.f_med2)
-        self.texto("Só aparece no mapa o que você já explorou.", (lx, y + 74), self.f_peq, (170, 170, 170))
+        self.texto("S = shopping   ·   M = mercado   ·   P = posto de gasolina", (lx, y + 74), self.f_peq, (170, 170, 170))
         self.texto("M ou ESC para fechar", (lx, oy + S - 20), self.f_peq, (170, 170, 170))
 
     # ================================================================ desenho
@@ -3218,6 +3252,26 @@ class Jogo:
             pygame.draw.rect(s, (150, 152, 148), (0, 0, w, h), 5)
             for _ in range(10):
                 pygame.draw.circle(s, (150, 140, 120), (r.randint(0, w), r.randint(0, h)), r.randint(3, 9))
+        elif b["tipo"] in ("mercado", "shopping", "gas"):
+            fundo = {"mercado": (60, 110, 170), "shopping": (150, 154, 162), "gas": (200, 60, 40)}[b["tipo"]]
+            s.fill(fundo)
+            if b["tipo"] == "shopping":  # claraboias
+                for gx in range(40, w - 40, 90):
+                    for gy in range(40, h - 40, 90):
+                        pygame.draw.rect(s, (120, 180, 210), (gx, gy, 46, 46))
+                        pygame.draw.rect(s, (90, 94, 100), (gx, gy, 46, 46), 3)
+            else:
+                for x_ in range(0, w, 24):
+                    pygame.draw.line(s, G.tom(fundo, -14), (x_, 0), (x_, h), 2)
+            if b["tipo"] == "gas":
+                pygame.draw.rect(s, (250, 210, 40), (0, h // 2 - 10, w, 20))
+            nome = {"mercado": "MERCADO", "shopping": "SHOPPING", "gas": "POSTO"}[b["tipo"]]
+            fonte = self.f_titulo if b["tipo"] == "shopping" else self.f_med
+            txt = fonte.render(nome, True, (255, 255, 255))
+            sh = fonte.render(nome, True, (0, 0, 0))
+            s.blit(sh, sh.get_rect(center=(w // 2 + 3, h // 2 + 3)))
+            s.blit(txt, txt.get_rect(center=(w // 2, h // 2)))
+            pygame.draw.rect(s, G.tom(fundo, -40), (0, 0, w, h), 5)
         elif b["tipo"] == "militar":
             s.fill((82, 92, 64))
             for _ in range(18):
@@ -3234,12 +3288,13 @@ class Jogo:
             s.blit(txt, txt.get_rect(center=(w // 2, h // 2 + 56)))
             pygame.draw.rect(s, (50, 56, 40), (0, 0, w, h), 5)
         G.vivo(s, 1.2, 1.05)
-        for px, py in (b.get("portas", []) if b["tipo"] in ("casa", "militar", "hospital", "posto") else []):
+        for px, py in (b.get("portas", []) if b["tipo"] in ("casa", "militar", "hospital", "posto", "mercado",
+                                                              "shopping", "gas") else []):
             lx = (px - b["x"]) * T
             ly = (py - b["y"]) * T
             pygame.draw.rect(s, (26, 24, 22), (lx, ly, T, T))
             pygame.draw.rect(s, (200, 170, 90), (lx, ly, T, T), 2)
-        if b["tipo"] in ("militar", "hospital", "posto"):
+        if b["tipo"] in ("militar", "hospital", "posto", "mercado", "shopping", "gas"):
             fonte = self.f_peq
             vistos = set()
             for px, py in b.get("portas", []):
@@ -3344,7 +3399,15 @@ class Jogo:
         psx = p.x - camx
         psy = p.y - camy
         tela.blit(self.spr_sombra, (psx - self.spr_sombra.get_width() / 2 + 4, psy - self.spr_sombra.get_height() / 2 + 6))
-        if self.agachado:
+        if self.__dict__.get("deitado"):
+            dei = self.__dict__.setdefault("spr_deitado", {})
+            if self.arma not in dei:
+                b = self.spr_j[self.arma]
+                d = pygame.transform.smoothscale(b, (int(b.get_width() * 1.1), int(b.get_height() * 0.62)))
+                d.fill((170, 165, 160, 255), special_flags=pygame.BLEND_RGBA_MULT)
+                dei[self.arma] = d
+            spr = self.rot(("jd", self.arma), dei[self.arma], math.degrees(p.ang), 4)
+        elif self.agachado:
             agach = self.__dict__.setdefault("spr_agachado", {})
             if self.arma not in agach:
                 b = self.spr_j[self.arma]
@@ -3688,7 +3751,10 @@ class Jogo:
             else:
                 self.texto("Escrever (só o dono)  ·  clique aqui e digite: ajuda", (rc.x + 10, rc.y + 8), self.f_peq,
                            (170, 120, 160))
-        if self.agachado:
+        if self.__dict__.get("deitado"):
+            self.texto("DEITADO  (T levanta)", (24, H - 160 - 24 * (p.sangrando + p.perna + p.braco)), self.f_med,
+                       (170, 220, 255))
+        elif self.agachado:
             self.texto("AGACHADO  (C levanta)", (24, H - 160 - 24 * (p.sangrando + p.perna + p.braco)), self.f_med,
                        (170, 220, 255))
         fr = min(1, uso / cap)

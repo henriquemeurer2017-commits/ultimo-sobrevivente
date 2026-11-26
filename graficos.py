@@ -776,6 +776,22 @@ def desenha_movel(s, tipo, aberto, x, y):
         pygame.draw.rect(s, (76, 90, 56), (x - 14, y - 9, 28, 18), border_radius=2)
         pygame.draw.rect(s, (46, 56, 36), (x - 14, y - 2, 28, 3))
         pygame.draw.rect(s, (200, 190, 120), (x - 4, y - 7, 8, 3))
+    elif tipo == "prateleira":
+        pygame.draw.rect(s, (70, 74, 80), (x - 26, y - 9, 52, 18), border_radius=2)
+        pygame.draw.rect(s, (130, 136, 146), (x - 25, y - 8, 50, 16), border_radius=2)
+        pygame.draw.line(s, (80, 84, 92), (x - 25, y), (x + 25, y), 2)
+        if not aberto:
+            cores = [(200, 60, 50), (60, 140, 210), (230, 190, 60), (90, 170, 90), (220, 120, 40)]
+            for k in range(6):
+                pygame.draw.rect(s, cores[(k + x // 7) % 5], (x - 23 + k * 8, y - 7, 6, 6))
+                pygame.draw.rect(s, cores[(k + y // 5) % 5], (x - 23 + k * 8, y + 2, 6, 5))
+    elif tipo == "vitrine":
+        pygame.draw.rect(s, (60, 46, 34), (x - 24, y - 11, 48, 22), border_radius=2)
+        pygame.draw.rect(s, (150, 196, 220), (x - 22, y - 9, 44, 18), border_radius=2)
+        if not aberto:
+            pygame.draw.rect(s, (40, 40, 44), (x - 14, y - 2, 22, 4))
+            pygame.draw.rect(s, (40, 40, 44), (x - 12, y + 1, 4, 5))
+        pygame.draw.line(s, (230, 245, 255), (x - 20, y - 8), (x - 8, y - 8), 2)
     elif tipo == "despensa":
         pygame.draw.rect(s, (60, 62, 58), (x - 26, y - 12, 52, 24), border_radius=2)
         pygame.draw.rect(s, (110, 112, 104), (x - 25, y - 11, 50, 22), border_radius=2)

@@ -127,6 +127,11 @@ async def main():
         n += 1
         if n == 1:
             log("primeiro quadro ok")
+            try:  # tira a tela de carregamento: o jogo ja apareceu
+                import platform
+                platform.window.esconderTelaCarga()
+            except Exception:
+                pass
         if time.time() - t > 2:
             t = time.time()
             guardar()

@@ -94,7 +94,8 @@ class Mundo:
         self.cidades = []
         nomes = NOMES_CIDADES[:]
         rnd.shuffle(nomes)
-        plano = [("cidade", 30)] * 3 + [("vila", 17)] * 11
+        # uma cidade grande (metropole), 5 cidades e 22 vilas
+        plano = [("metropole", 46)] + [("cidade", 30)] * 5 + [("vila", 17)] * 22
         for tipo, raio in plano:
             for _ in range(3000):
                 x = rnd.randint(50, N - 51)
@@ -104,7 +105,8 @@ class Mundo:
                 sub = t[y - raio:y + raio + 1, x - raio:x + raio + 1]
                 if (sub == AGUA).mean() > 0.01:
                     continue
-                self.cidades.append(dict(nome=nomes.pop(), x=x, y=y, raio=raio, tipo=tipo))
+                nome = NOME_METROPOLE if tipo == "metropole" else nomes.pop()
+                self.cidades.append(dict(nome=nome, x=x, y=y, raio=raio, tipo=tipo))
                 break
 
         # estradas ligando tudo (arvore minima)
@@ -122,11 +124,19 @@ class Mundo:
             i, j = rnd.sample(range(len(cs)), 2)
             pares.append((i, j))
         for i, j in pares:
-            tipo = ASFALTO if cs[i]["tipo"] == "cidade" and cs[j]["tipo"] == "cidade" else TERRA
+            tipo = ASFALTO if cs[i]["tipo"] != "vila" and cs[j]["tipo"] != "vila" else TERRA
             self._estrada((cs[i]["x"], cs[i]["y"]), (cs[j]["x"], cs[j]["y"]), tipo)
 
         for c in cs:
-            if c["tipo"] == "cidade":
+            if c["tipo"] == "metropole":  # o SHOPPING fica no meio da cidade grande
+                for _ in range(800):
+                    x = c["x"] + rnd.randint(-10, 10) - 13
+                    y = c["y"] + rnd.randint(-10, 10) - 9
+                    sub = self._t[y - 2:y + 20, x - 2:x + 28]
+                    if not np.isin(sub, [AGUA, PONTE]).any() and not self.ocup[y - 2:y + 20, x - 2:x + 28].any():
+                        self._predio("shopping", x, y, 26, 18, c)  # pode ficar em cima da estrada
+                        break
+            if c["tipo"] != "vila":
                 r = c["raio"]
                 for _ in range(600):
                     x = c["x"] + rnd.randint(-r // 2, r // 2) - 8
@@ -134,9 +144,16 @@ class Mundo:
                     if self._livre(x, y, 16, 12):
                         self._predio("hospital", x, y, 16, 12, c)
                         break
+                for _ in range(2 if c["tipo"] == "metropole" else 1):  # mercados
+                    for _ in range(600):
+                        x = c["x"] + rnd.randint(-r + 6, r - 6) - 6
+                        y = c["y"] + rnd.randint(-r + 6, r - 6) - 5
+                        if self._livre(x, y, 13, 10):
+                            self._predio("mercado", x, y, 13, 10, c)
+                            break
         for c in cs:
-            if c["tipo"] == "cidade":
-                for k in range(-2, 3):
+            if c["tipo"] != "vila":
+                for k in range(-3, 4) if c["tipo"] == "metropole" else range(-2, 3):
                     yy_ = c["y"] + k * 15
                     xx_ = c["x"] + k * 15
                     for x in range(c["x"] - c["raio"], c["x"] + c["raio"] + 1):
@@ -160,12 +177,21 @@ class Mundo:
                     if self._livre(x, y, 10, 8):
                         self._predio("posto", x, y, 10, 8, c)
                         break
-            alvo = 30 if c["tipo"] == "cidade" else 9
+            # posto de gasolina na beira da cidade (e em metade das vilas)
+            if c["tipo"] != "vila" or rnd.random() < 0.5:
+                for _ in range(400):
+                    a = rnd.uniform(0, 6.283)
+                    x = int(c["x"] + math.cos(a) * (r + 3)) - 5
+                    y = int(c["y"] + math.sin(a) * (r + 3)) - 4
+                    if self._livre(x, y, 10, 8):
+                        self._predio("gas", x, y, 10, 8, c)
+                        break
+            alvo = {"metropole": 70, "cidade": 30}.get(c["tipo"], 9)
             feitas = 0
             for _ in range(alvo * 40):
                 if feitas >= alvo:
                     break
-                if c["tipo"] == "cidade":
+                if c["tipo"] != "vila":
                     w = rnd.randint(6, 10)
                     h = rnd.randint(6, 9)
                 else:
@@ -185,7 +211,7 @@ class Mundo:
         yield ("Escondendo bunkers militares na floresta...")
         cabanas = 0
         for _ in range(4000):
-            if cabanas >= 28:
+            if cabanas >= 60:
                 break
             w = rnd.randint(6, 8)
             h = rnd.randint(5, 7)
@@ -287,7 +313,7 @@ class Mundo:
         vias = self.vias
         rnd.shuffle(vias)
         for (tx, ty) in vias:
-            if len(self.carros) > 260:
+            if len(self.carros) > 600:
                 break
             if rnd.random() > 0.05 or self.t[ty * N + tx] == PONTE:
                 continue
@@ -314,9 +340,9 @@ class Mundo:
         yield ("Espalhando armas e suprimentos pelo chao...")
         self.itens_chao = []
         tent = 0
-        while len(self.itens_chao) < 1700 and tent < 40000:
+        while len(self.itens_chao) < 3800 and tent < 90000:
             tent += 1
-            if len(self.itens_chao) < 1000:
+            if len(self.itens_chao) < 2250:
                 tx = rnd.randint(5, N - 6)
                 ty = rnd.randint(5, N - 6)
             else:
@@ -395,7 +421,7 @@ class Mundo:
         yy, xx = np.mgrid[0:N, 0:N]
         for c in self.cidades:
             dc = np.hypot(xx - c["x"], yy - c["y"])
-            dens = np.where(dc < c["raio"] * 1.2, np.maximum(dens, 0.7 if c["tipo"] == "cidade" else 0.45), dens)
+            dens = np.where(dc < c["raio"] * 1.2, np.maximum(dens, {"metropole": 1.0, "cidade": 0.7}.get(c["tipo"], 0.45)), dens)
         # perto de onde voce comeca e calmo
         ix, iy = self.inicio[0] / T, self.inicio[1] / T
         dens = np.where(np.hypot(xx - ix, yy - iy) < 45, 0, dens)
@@ -543,13 +569,13 @@ class Mundo:
                     self.itens_chao.append(dict(id=len(self.itens_chao), x=x, y=y, item=item, q=q))
                     return
         for c in self.cidades:
-            pilhas = 40 if c["tipo"] == "cidade" else 14
+            pilhas = {"metropole": 70, "cidade": 40}.get(c["tipo"], 14)
             for _ in range(pilhas):
                 if rnd.random() < 0.6:
                     solta("tabua", rnd.randint(3, 6), c["x"], c["y"], c["raio"] * 1.3)
                 else:
                     solta("sucata", rnd.randint(2, 5), c["x"], c["y"], c["raio"] * 1.3)
-            for _ in range(3 if c["tipo"] == "cidade" else 1):
+            for _ in range(1 if c["tipo"] == "vila" else 3):
                 solta(rnd.choice(["mochila1", "mochila2", "mochila2", "mochila3"]), 1, c["x"], c["y"], c["raio"] * 1.2)
         # uma mochila escolar perto de onde voce comeca
         solta("mochila1", 1, self.inicio[0] / T, self.inicio[1] / T, 4)
@@ -721,7 +747,8 @@ class Mundo:
     def _predio(self, tipo, x, y, w, h, cidade):
         rnd = self.rnd
         t = self._t
-        piso = {"casa": PISO_MAD, "hospital": PISO_HOSP, "posto": PISO_HOSP, "militar": PISO_CONC, "torre": PISO_CONC}[tipo]
+        piso = {"casa": PISO_MAD, "hospital": PISO_HOSP, "posto": PISO_HOSP, "militar": PISO_CONC, "torre": PISO_CONC,
+                "mercado": PISO_HOSP, "shopping": PISO_HOSP, "gas": PISO_CONC}[tipo]
         parede = PAREDE_CONC if tipo == "militar" else PAREDE
         b = dict(tipo=tipo, x=x, y=y, w=w, h=h, cidade=cidade["nome"] if cidade else None, id=len(self.construcoes))
         self.construcoes.append(b)
@@ -752,6 +779,8 @@ class Mundo:
         porta(lado)
         if tipo == "hospital":
             porta("N")
+        if tipo == "shopping":  # o shopping tem entrada dos dois lados
+            porta({"N": "S", "S": "N", "O": "L", "L": "O"}[lado])
         for px, py in portas:
             t[py, px] = PORTA
         b["portas"] = portas
@@ -783,6 +812,25 @@ class Mundo:
             for bx in (x + 2, x + 5, x + w - 4, x + w - 7):
                 self.moveis.append(dict(id=len(self.moveis), x=bx * T + 16, y=(y + h - 2) * T + 22, tipo="medico",
                                         aberto=False, predio=b, itens=sortear(rnd, LOOT["medico"], rnd.randint(1, 3))))
+            return b
+        if tipo in ("mercado", "shopping", "gas"):
+            # prateleiras em fileiras (e vitrines de armas no shopping)
+            loot = {"mercado": "mercado", "shopping": "mercado", "gas": "conveniencia"}[tipo]
+            passo_x = 4
+            for yy in range(y + 2, y + h - 2, 3):
+                for xx in range(x + 3, x + w - 3, passo_x):
+                    if any((xx + d, yy) in bloqueados for d in (-1, 0, 1, 2)):
+                        continue
+                    if tipo == "shopping" and yy == y + 2 and (xx - x) % 8 == 3:
+                        self.moveis.append(dict(id=len(self.moveis), x=xx * T + 16, y=yy * T + 16, tipo="vitrine",
+                                                aberto=False, predio=b, itens=sortear(rnd, LOOT["loja_armas"], 2)))
+                        continue
+                    self.moveis.append(dict(id=len(self.moveis), x=xx * T + 16, y=yy * T + 16, tipo="prateleira",
+                                            aberto=False, predio=b, itens=sortear(rnd, LOOT[loot], rnd.randint(1, 3))))
+            if tipo == "shopping":
+                for bx in (x + 2, x + w - 3):
+                    self.moveis.append(dict(id=len(self.moveis), x=bx * T + 16, y=(y + h - 2) * T + 16, tipo="medico",
+                                            aberto=False, predio=b, itens=sortear(rnd, LOOT["medico"], 3)))
             return b
         if tipo == "posto":
             for bx in (x + 2, x + 5):

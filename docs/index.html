@@ -446,5 +446,62 @@ function telaCheia() {
 document.addEventListener("pointerdown", telaCheia, {once: true});
 document.addEventListener("keydown", telaCheia, {once: true});
 </script>
+
+<div id="telacarga">
+  <div class="tc-sangue"></div>
+  <img src="favicon.png" class="tc-zumbi" alt="">
+  <div class="tc-titulo">ÚLTIMO SOBREVIVENTE</div>
+  <div class="tc-sub">um apocalipse zumbi em mundo aberto</div>
+  <div class="tc-barra"><div class="tc-enche"></div></div>
+  <div class="tc-txt" id="tc-txt">Carregando o jogo...</div>
+  <div class="tc-aviso">Na primeira vez demora uns 30 segundos: o navegador está baixando o jogo.<br>
+  Não é vírus, não precisa instalar nada.</div>
+  <div class="tc-dica" id="tc-dica"></div>
+</div>
+<style>
+#telacarga { position: fixed; inset: 0; z-index: 9999999; background: radial-gradient(circle at 50% 40%, #2a0d0d 0%, #0b0606 60%, #000 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: Arial, sans-serif; color: #e8d8c8;
+  overflow: hidden; }
+.tc-sangue { position: absolute; top: 0; left: 0; right: 0; height: 90px; background:
+  repeating-linear-gradient(90deg, #6a0000 0 18px, transparent 18px 46px); opacity: .55;
+  -webkit-mask-image: linear-gradient(#000, transparent); mask-image: linear-gradient(#000, transparent); animation: pinga 4s ease-in-out infinite alternate; }
+@keyframes pinga { from { height: 60px } to { height: 120px } }
+.tc-zumbi { width: 150px; height: 150px; image-rendering: pixelated; filter: drop-shadow(0 0 22px #a00);
+  animation: balanca 1.6s ease-in-out infinite; }
+@keyframes balanca { 0%,100% { transform: rotate(-6deg) translateY(0) } 50% { transform: rotate(6deg) translateY(-8px) } }
+.tc-titulo { font-size: 64px; font-weight: 900; color: #e3271b; letter-spacing: 3px; margin-top: 14px;
+  text-shadow: 4px 5px 0 #300, 0 0 26px #ff1a1a88; animation: treme 3s infinite; }
+@keyframes treme { 0%,92%,100% { transform: translate(0,0) } 94% { transform: translate(-3px,2px) } 96% { transform: translate(3px,-2px) } }
+.tc-sub { font-size: 18px; color: #b9a99a; margin-bottom: 26px; }
+.tc-barra { width: min(520px, 80vw); height: 18px; border: 2px solid #7a1a14; border-radius: 10px; background: #1a0a0a; overflow: hidden; }
+.tc-enche { height: 100%; width: 0%; background: linear-gradient(90deg, #7a0d08, #e3271b); box-shadow: 0 0 14px #e3271b;
+  animation: enche 32s cubic-bezier(.2,.7,.4,1) forwards; }
+@keyframes enche { to { width: 96% } }
+.tc-txt { margin-top: 12px; font-size: 18px; font-weight: bold; }
+.tc-aviso { margin-top: 10px; font-size: 14px; color: #a89888; text-align: center; line-height: 1.5; }
+.tc-dica { margin-top: 26px; font-size: 16px; color: #f0c070; text-align: center; max-width: 80vw; min-height: 22px; }
+</style>
+<script>
+(function () {
+  const dicas = ["Dica: zumbi de costas não te vê.", "Dica: no capim alto você fica quase invisível.",
+    "Dica: aperte V para abrir a mochila.", "Dica: a bancada dos bunkers melhora suas armas.",
+    "Dica: deitado (T) quase ninguém te vê.", "Dica: o SHOPPING fica no meio da cidade grande.",
+    "Dica: a besta não faz barulho.", "Dica: beba água! A sede mata."];
+  const passos = ["Carregando o jogo...", "Acordando os zumbis...", "Espalhando armas pelo mapa...",
+    "Construindo a cidade grande...", "Quase lá..."];
+  let i = 0, j = 0;
+  const d = document.getElementById("tc-dica"), t = document.getElementById("tc-txt");
+  d.textContent = dicas[Math.floor(Math.random() * dicas.length)];
+  window.__tcTimer = setInterval(() => {
+    i++; d.textContent = dicas[(i + Math.floor(Math.random() * 3)) % dicas.length];
+    if (j < passos.length - 1) { j++; t.textContent = passos[j]; }
+  }, 5000);
+  window.esconderTelaCarga = function () {
+    const el = document.getElementById("telacarga");
+    if (el) { el.style.transition = "opacity .6s"; el.style.opacity = "0"; setTimeout(() => el.remove(), 700); }
+    clearInterval(window.__tcTimer);
+  };
+})();
+</script>
 </body>
 </html>

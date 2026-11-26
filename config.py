@@ -10,7 +10,7 @@ MUNDOS_DIR = os.path.join(HERE, "mundos")   # cada mundo salvo fica num arquivo 
 W, H = 1280, 720
 FPS = 60
 T = 32                 # tamanho do quadradinho do mapa (pixels)
-N = 512                # mundo tem N x N quadradinhos (16.384 px de lado)
+N = 768                # mundo tem N x N quadradinhos (24.576 px de lado)
 CH = 16                # pedaco (chunk) de 16x16 quadradinhos
 CHPX = CH * T
 EXPLO = 4              # celula do "mapa explorado" = 4x4 quadradinhos
@@ -32,8 +32,11 @@ TEMPO_RESGATE = 240.0    # segundos aguentando a horda ate o helicoptero
 NOMES_CIDADES = [
     "Santa Rita", "Boa Vista", "Pedra Branca", "São Jorge", "Vale Verde", "Rio Claro",
     "Monte Alto", "Serra Azul", "Campo Belo", "Água Fria", "Tres Pinheiros", "Porto Velho",
-    "Lagoa Seca", "Bom Jesus", "Alto Alegre", "Vila Nova",
+    "Lagoa Seca", "Bom Jesus", "Alto Alegre", "Vila Nova", "Ponte Alta", "Cruz das Almas", "Pinhal",
+    "Rio Fundo", "Céu Azul", "Morro Velho", "Areia Branca", "Sol Nascente", "Barro Preto", "Campo Largo",
+    "Ouro Fino", "Palmeiras", "Cachoeira", "Ventania", "Riacho Doce", "Esperança", "Toca da Onça",
 ]
+NOME_METROPOLE = "Nova Capital"
 
 ITENS = {
     "comida": "Comida enlatada",
@@ -152,10 +155,21 @@ LOOT = {
 LOOT_ZUMBI = LOOT["chao"] + [("facao", 1.5, 1, 1), ("smg", 0.6, 1, 1), ("besta", 0.6, 1, 1), ("flecha", 4, 3, 8),
                              ("taco", 1.5, 1, 1), ("revolver", 0.6, 1, 1), ("38", 4, 4, 10)]
 
+# mercados, shopping e posto de gasolina
+LOOT["mercado"] = [("comida", 30, 1, 3), ("agua", 30, 1, 3), ("bandagem", 8, 1, 2), ("kit", 2, 1, 1),
+                   ("ferramentas", 3, 1, 1), ("tabua", 4, 2, 4), ("saco", 1, 1, 1), ("lanterna_pilha", 0, 1, 1)]
+LOOT["mercado"] = [x for x in LOOT["mercado"] if x[1] > 0]
+LOOT["loja_armas"] = [("pistola", 6, 1, 1), ("revolver", 4, 1, 1), ("espingarda", 4, 1, 1), ("smg", 3, 1, 1),
+                      ("fuzil", 2, 1, 1), ("rifle", 1.5, 1, 1), ("9mm", 10, 10, 25), ("12", 8, 4, 12),
+                      ("38", 8, 6, 14), ("556", 5, 10, 30), ("silenciador", 3, 1, 1), ("mira", 2, 1, 1)]
+LOOT["conveniencia"] = [("comida", 20, 1, 2), ("agua", 25, 1, 3), ("sucata", 14, 2, 5), ("ferramentas", 6, 1, 1),
+                        ("tabua", 6, 2, 4), ("bandagem", 6, 1, 1)]
+
 NOMES_MOVEIS = {
     "armario": "armário", "geladeira": "geladeira", "gaveta": "cômoda", "caixa": "caixa",
     "medico": "armário de remédios", "militar": "caixa militar", "porta_malas": "porta-malas",
     "mochila": "sua mochila",
+    "prateleira": "prateleira", "vitrine": "vitrine de armas",
     "despensa": "despensa do bunker", "arsenal": "arsenal do bunker",
 }
 
