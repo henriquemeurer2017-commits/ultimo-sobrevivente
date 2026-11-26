@@ -865,7 +865,7 @@ class Jogo:
             explorado=self.explorado.hex(), lanterna=self.lanterna, nivel_mochila=self.nivel_mochila,
             feridas=[self.p.sangrando, self.p.perna, self.p.braco],
             niveis=self.niveis, miras=self.miras, reforco_mochila=self.reforco_mochila,
-            colete=self.colete, capacete=self.capacete, calca=self.calca, nivel_lanterna=self.nivel_lanterna,
+            colete=self.colete, capacete=self.capacete, radio_consertado=self.__dict__.get("radio_consertado", False), calca=self.calca, nivel_lanterna=self.nivel_lanterna,
             cao=dict(x=self.cao["x"], y=self.cao["y"], amigo=self.cao["amigo"]) if self.cao else None,
             carros=[[i, round(c["x"], 1), round(c["y"], 1), round(c["ang"], 1), c.get("gas", 0)]
                     for i, c in enumerate(m.carros) if c.get("mexeu")],
@@ -926,6 +926,7 @@ class Jogo:
         self.nivel_mochila = d.get("nivel_mochila", 0)
         self.niveis = d.get("niveis", {})
         self.colete = d.get("colete", 0.0)
+        self.radio_consertado = d.get("radio_consertado", False)
         self.nivel_lanterna = d.get("nivel_lanterna", 1)
         if d.get("cao"):
             self.cao = dict(d["cao"], ang=0.0, t_mordida=0.0, t_latido=0.0, au=0.0, t_aviso=0.0, passo=0.0)
@@ -2481,6 +2482,8 @@ class Jogo:
         if tipo == "torre":
             if self.resgate:
                 return "Aguente firme! O helicóptero está vindo."
+            if self.__dict__.get("radio_consertado"):
+                return "[E] Chamar o helicóptero de novo pelo rádio"
             return f"[E] Usar o rádio da torre ({self.inv.get('peca', 0)}/{PECAS_RADIO} peças)"
         return ""
 
@@ -2559,7 +2562,7 @@ class Jogo:
         elif tipo == "torre":
             if self.resgate:
                 return
-            if self.inv.get("peca", 0) >= PECAS_RADIO:
+            if self.inv.get("peca", 0) >= PECAS_RADIO or self.__dict__.get("radio_consertado"):
                 self.acao = dict(tipo="torre", obj=obj, t=0.0, total=3.0, txt="Consertando o rádio...")
             else:
                 self.msg(f"O rádio está quebrado. Faltam {PECAS_RADIO - self.inv.get('peca', 0)} peças.", (255, 210, 150))
@@ -2612,11 +2615,15 @@ class Jogo:
             self.msg("Você bebeu água do lago.", (160, 210, 255))
             self.som("comer", 0.5)
         elif tipo == "torre":
-            self.inv["peca"] -= PECAS_RADIO
+            if not self.__dict__.get("radio_consertado"):
+                self.inv["peca"] -= PECAS_RADIO
+            self.radio_consertado = True  # se voce morrer, da para chamar o helicoptero de novo
             self.resgate = TEMPO_RESGATE
+            self.hora = 9.0  # o resgate acontece de dia: da para ver os zumbis chegando
+            self.chuva = False
             self.msg("RÁDIO: \"Recebido! Helicóptero a caminho. Aguente firme!\"", (255, 230, 120))
-            self.msg("O barulho atraiu uma horda inteira...", (255, 140, 120))
-            self.fazer_barulho(p.x, p.y, 3000)
+            self.msg("O dia clareou. Alguns zumbis ouviram o rádio... aguente!", (255, 200, 140))
+            self.fazer_barulho(p.x, p.y, 1200)
 
     def passar_horas(self, h):
         self.p.fome = max(3, self.p.fome - h * 2.4)
@@ -3189,7 +3196,7 @@ class Jogo:
             base = {"metropole": 14, "cidade": 9}.get(cid["tipo"], 7)
             alvo = max(alvo, round(base + min(self.dia * 0.2, 3) + 1 * esc))
         if self.resgate is not None:
-            alvo = 22
+            alvo = 10  # no resgate vem zumbi, mas nao uma multidao
         seguro = self.em_zona_segura(p.x, p.y)
         calma = dl < 0.05 and self.resgate is None
         if calma != self.na_calma:
@@ -3201,7 +3208,7 @@ class Jogo:
         self.t_spawn -= dt
         if self.t_spawn <= 0 and len(self.zumbis) < alvo:
             if self.resgate is not None:
-                self.t_spawn = 0.7
+                self.t_spawn = 2.0
             elif na_cidade:  # chegando na cidade enche rapido, depois vai devagar
                 self.t_spawn = 0.6 if len(self.zumbis) < alvo // 2 else 2.0
             else:
