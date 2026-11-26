@@ -49,6 +49,7 @@ ITENS = {
     "308": "Munição de sniper",
     "silenciador": "Silenciador",
     "flecha": "Flechas",
+    "galao": "Galão de gasolina",
     "38": "Balas .38",
     "taco": "Taco com pregos",
     "revolver": "Revólver",
@@ -184,7 +185,7 @@ NOMES_MOVEIS = {
 # espaco que cada unidade ocupa na mochila
 ESPACO = {"comida": 1, "agua": 1, "bandagem": 0.5, "kit": 1.5, "9mm": 0.04, "12": 0.08, "556": 0.04, "308": 0.08,
           "tabua": 1, "sucata": 1, "ferramentas": 2, "seringa": 0.5, "saco": 4,
-          "flecha": 0.15, "38": 0.05, "mira": 0.5, "foguete": 1}
+          "flecha": 0.15, "galao": 3, "38": 0.05, "mira": 0.5, "foguete": 1}
 # estacoes do ano: cada uma dura 6 dias. (nome, multiplica cor, soma cor, fome x, sede x)
 ESTACOES = [("Verão", (1.04, 1.02, 0.92), (8, 6, 0), 1.0, 1.35),
             ("Outono", (1.12, 0.92, 0.70), (14, 4, 0), 1.0, 1.0),

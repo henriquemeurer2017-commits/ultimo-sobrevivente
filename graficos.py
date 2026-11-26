@@ -442,6 +442,11 @@ def _desenha_icone_bruto(s, item, x, y, k=1.0):
     elif item == "maos":
         pygame.draw.circle(s, (214, 168, 128), (x, y), max(3, int(6 * k)))
         pygame.draw.circle(s, (170, 128, 96), (x, y), max(3, int(6 * k)), 1)
+    elif item == "galao":
+        pygame.draw.rect(s, (20, 20, 24), R(-8, -8, 16, 17), border_radius=2)
+        pygame.draw.rect(s, (200, 40, 30), R(-7, -7, 14, 15), border_radius=2)
+        pygame.draw.rect(s, (40, 40, 44), R(1, -11, 5, 4))
+        pygame.draw.line(s, (240, 200, 60), (x - 4 * k, y + 4 * k), (x + 4 * k, y - 4 * k), max(1, int(2 * k)))
     elif item == "seringa":
         pygame.draw.line(s, (200, 200, 210), (x - 11 * k, y + 8 * k), (x + 6 * k, y - 9 * k), max(1, int(6 * k)))
         pygame.draw.line(s, (240, 60, 70), (x - 8 * k, y + 5 * k), (x + 3 * k, y - 6 * k), max(1, int(3 * k)))

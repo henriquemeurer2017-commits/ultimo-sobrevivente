@@ -334,6 +334,7 @@ class Mundo:
                 self.add_colisor(px, py, 13)
             bx = x - math.cos(a) * 36
             by = y + math.sin(a) * 36
+            car["mala"] = len(self.moveis)
             self.moveis.append(dict(id=len(self.moveis), x=bx, y=by, tipo="porta_malas", aberto=False,
                                     itens=sortear(rnd, LOOT["porta_malas"], rnd.choice([0, 1, 1, 2, 2, 3]))))
 
@@ -492,6 +493,14 @@ class Mundo:
         for mv in self.moveis:
             if mv["tipo"] == "militar" and rnd.random() < 0.22:
                 mv["itens"].append(["mira", 1])
+        # galoes de gasolina para os carros
+        for mv in self.moveis:
+            if mv["tipo"] == "prateleira" and (mv.get("predio") or {}).get("tipo") == "gas" and rnd.random() < 0.5:
+                mv["itens"].append(["galao", 1])
+            elif mv["tipo"] == "porta_malas" and rnd.random() < 0.08:
+                mv["itens"].append(["galao", 1])
+        for i, c in enumerate(self.carros):  # cada carro tem um pouco de gasolina
+            c["gas"] = round(random.Random(self.seed * 31 + i).uniform(0, 60))
         # seringas rarissimas nos hospitais
         medicos = [mv for mv in self.moveis if mv["tipo"] == "medico" and (mv.get("predio") or {}).get("tipo") != "militar"]
         rnd.shuffle(medicos)
@@ -1075,8 +1084,10 @@ class Mundo:
         self.spr_capim_g = [G.capim(rnd, rnd.randint(22, 34)) for _ in range(12)]
         self.spr_tufo = [G.tufo(rnd) for _ in range(16)]
         self.spr_carro = []
+        self.base_carro = []
         for c in self.carros:
             base = G.carro(rnd, G.CORES_CARRO[c["cor"]])
+            self.base_carro.append(base)
             self.spr_carro.append(pygame.transform.rotate(base, c["ang"]))
         for i, c in enumerate(self.carros):
             c["spr"] = i

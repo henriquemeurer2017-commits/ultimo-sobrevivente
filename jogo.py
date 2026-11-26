@@ -753,6 +753,8 @@ class Jogo:
         self.digitado = ""
         self.niveis = {}
         self.telhado_b = None   # predio em cujo telhado voce esta
+        self.dirigindo = None   # carro que voce esta dirigindo
+        self.vel_carro = 0.0
         self.colete = 0.0
         self.capacete = 0.0
         self.luneta = False
@@ -834,6 +836,8 @@ class Jogo:
             feridas=[self.p.sangrando, self.p.perna, self.p.braco],
             niveis=self.niveis, miras=self.miras, reforco_mochila=self.reforco_mochila,
             colete=self.colete, capacete=self.capacete,
+            carros=[[i, round(c["x"], 1), round(c["y"], 1), round(c["ang"], 1), c.get("gas", 0)]
+                    for i, c in enumerate(m.carros) if c.get("mexeu")],
             moedas=self.moedas, dono=self.dono, mochila_infinita=self.mochila_infinita,
             nome=self.__dict__.get("nome_mundo", "Meu mundo"),
         )
@@ -891,6 +895,9 @@ class Jogo:
         self.nivel_mochila = d.get("nivel_mochila", 0)
         self.niveis = d.get("niveis", {})
         self.colete = d.get("colete", 0.0)
+        for i, x_, y_, a_, g_ in d.get("carros", []):
+            if i < len(m.carros):
+                self.estacionar(m.carros[i], x_, y_, a_, g_, tirar=True)
         self.capacete = d.get("capacete", 0.0)
         self.miras = d.get("miras", [])
         self.reforco_mochila = d.get("reforco_mochila", 0)
@@ -1286,6 +1293,7 @@ class Jogo:
                        (180, 175, 165))
         # itens
         acoes = {"comida": "Comer", "agua": "Beber", "bandagem": "Curar", "kit": "Curar", "seringa": "Injetar",
+                 "galao": "Abastecer",
                  "saco": "Dormir"}
         lista = [k for k in ITENS if k in ESPACO or k == "peca"]
         lista = [k for k in lista if self.inv.get(k, 0) > 0]
@@ -1726,6 +1734,116 @@ class Jogo:
             txt = ", ".join(f"{n_} {ITENS[q_].split(' ')[0].lower()}" for q_, n_ in rec["custo"].items())
             self.texto(txt, (r.centerx, r.y + 48), self.f_peq, (200, 195, 180) if pode else (150, 140, 140), centro=True)
 
+    # ================================================================ carros
+    def tirar_carro_do_mapa(self, c):
+        """Tira o carro do chao desenhado e das batidas (para ele poder andar)."""
+        m = self.mundo
+        a = math.radians(c["ang"])
+        for k in (-16, 0, 16):
+            px, py = c["x"] + math.cos(a) * k, c["y"] - math.sin(a) * k
+            i = int(py // T) * N + int(px // T)
+            m.col[i] = [q for q in m.col.get(i, []) if abs(q[0] - px) > 0.01 or abs(q[1] - py) > 0.01]
+        lst = m.carros_ch.get((int(c["x"] // CHPX), int(c["y"] // CHPX)), [])
+        if c in lst:
+            lst.remove(c)
+        self.invalidar(c["x"], c["y"])
+
+    def estacionar(self, c, x, y, ang, gas, tirar=False):
+        m = self.mundo
+        if tirar:
+            self.tirar_carro_do_mapa(c)
+        c.update(x=x, y=y, ang=ang, gas=gas, mexeu=True)
+        a = math.radians(ang)
+        for k in (-16, 0, 16):
+            m.add_colisor(x + math.cos(a) * k, y - math.sin(a) * k, 13)
+        m.carros_ch.setdefault((int(x // CHPX), int(y // CHPX)), []).append(c)
+        m.spr_carro[c["spr"]] = pygame.transform.rotate(m.base_carro[c["spr"]], ang)
+        mala = c.get("mala")
+        if mala is not None and mala < len(m.moveis):  # o porta-malas vai junto
+            mv = m.moveis[mala]
+            lst = m.moveis_ch.get((int(mv["x"] // CHPX), int(mv["y"] // CHPX)), [])
+            if mv in lst:
+                lst.remove(mv)
+            mv["x"], mv["y"] = x - math.cos(a) * 36, y + math.sin(a) * 36
+            m.moveis_ch.setdefault((int(mv["x"] // CHPX), int(mv["y"] // CHPX)), []).append(mv)
+        self.invalidar(x, y)
+
+    def entrar_carro(self, c):
+        if self.telhado_b:
+            return
+        self.tirar_carro_do_mapa(c)
+        self.dirigindo = c
+        self.vel_carro = 0.0
+        self.agachado = False
+        self.__dict__["deitado"] = False
+        self.p.x, self.p.y = c["x"], c["y"]
+        self.som("clique", 0.6)
+        self.msg("Dirigindo! W acelera · S freia/ré · A e D viram · E sai. Atropele os zumbis!", (170, 220, 255))
+        if c.get("gas", 0) <= 0:
+            self.msg("Este carro está sem gasolina. Use um GALÃO (ache nos postos e porta-malas).", (255, 190, 130))
+
+    def sair_carro(self):
+        c = self.dirigindo
+        m = self.mundo
+        a = math.radians(c["ang"])
+        for lado in (1, -1):  # sai pela porta do lado do carro
+            sx = c["x"] + math.cos(a + lado * math.pi / 2) * 40
+            sy = c["y"] - math.sin(a + lado * math.pi / 2) * 40
+            if not m.bloqueado(sx, sy, self.p.r):
+                break
+        self.dirigindo = None
+        self.vel_carro = 0.0
+        self.estacionar(c, c["x"], c["y"], c["ang"], c.get("gas", 0))
+        self.p.x, self.p.y = sx, sy
+        self.som("clique", 0.6)
+
+    def dirigir(self, dt, mv):
+        c = self.dirigindo
+        m = self.mundo
+        mx, my = mv
+        gas = c.get("gas", 0)
+        acel = -my  # W = para frente, S = freia / re
+        if acel > 0 and gas > 0:
+            self.vel_carro = min(430.0, self.vel_carro + 300 * dt)
+        elif acel < 0:
+            self.vel_carro = max(-140.0, self.vel_carro - 420 * dt)
+        else:
+            self.vel_carro *= max(0.0, 1 - 1.6 * dt)
+        if abs(self.vel_carro) > 5:
+            vira = -mx * 150 * dt * min(1.0, abs(self.vel_carro) / 160) * (1 if self.vel_carro > 0 else -1)
+            c["ang"] = (c["ang"] + vira) % 360
+        a = math.radians(c["ang"])
+        dx, dy = math.cos(a) * self.vel_carro * dt, -math.sin(a) * self.vel_carro * dt
+        frente = 30 if self.vel_carro >= 0 else -30
+        nx, ny = c["x"] + dx, c["y"] + dy
+        if m.bloqueado(nx + math.cos(a) * frente, ny - math.sin(a) * frente, 14) or m.bloqueado(nx, ny, 14) \
+                or m.tile_px(nx, ny) == AGUA:
+            if abs(self.vel_carro) > 200:
+                self.tremor = max(self.tremor, 8)
+                self.som("golpe", 0.7)
+            self.vel_carro = -self.vel_carro * 0.25
+        else:
+            c["x"], c["y"] = nx, ny
+        if gas > 0:
+            c["gas"] = max(0.0, gas - abs(self.vel_carro) / 430 * dt * 0.6)
+            if c["gas"] <= 0:
+                self.msg("Acabou a gasolina! Use um GALÃO.", (255, 190, 130))
+        self.p.x, self.p.y = c["x"], c["y"]
+        self.p.ang = -a
+        # atropelar zumbis
+        if abs(self.vel_carro) > 110:
+            for z in list(self.zumbis):
+                if (z.x - c["x"]) ** 2 + (z.y - c["y"]) ** 2 < (z.r + 26) ** 2:
+                    self.ferir_zumbi(z, 70 + abs(self.vel_carro) * 0.6, -a)
+                    z.x += math.cos(a) * 30
+                    z.y -= math.sin(a) * 30
+                    self.tremor = max(self.tremor, 4)
+                    self.vel_carro *= 0.85
+            for z in [z for z in self.zumbis if z.hp <= 0]:
+                self.matar(z, -a)
+        if abs(self.vel_carro) > 60:  # o motor faz barulho
+            self.fazer_barulho(c["x"], c["y"], 300 + abs(self.vel_carro))
+
     def capacidade(self):
         if self.mochila_infinita:
             return 999999
@@ -2044,6 +2162,17 @@ class Jogo:
                 p.sangrando = False
                 self.msg("O sangramento parou.", (170, 240, 170))
             p.vida = min(100, p.vida + 22)
+        elif item == "galao":
+            carro = self.dirigindo or next((c for c in self.mundo.perto(self.mundo.carros_ch, p.x, p.y)
+                                            if math.hypot(c["x"] - p.x, c["y"] - p.y) < 70), None)
+            if not carro:
+                self.msg("Chegue perto de um carro (ou entre nele) para pôr a gasolina.", (220, 170, 150))
+                return
+            if carro.get("gas", 0) >= 99:
+                self.msg("O tanque já está cheio.")
+                return
+            carro["gas"] = min(100, carro.get("gas", 0) + 50)
+            self.msg(f"Abasteceu o carro: gasolina {int(carro['gas'])}%.", (200, 230, 200))
         elif item == "seringa":
             p.curar_tudo()
             p.vida = 100
@@ -2075,6 +2204,8 @@ class Jogo:
     def alvo_interacao(self):
         p = self.p
         m = self.mundo
+        if self.dirigindo:
+            return ("sair_carro", self.dirigindo)
         if self.telhado_b:  # no telhado so da para descer pela escada
             e = self.telhado_b.get("escada")
             if e and math.hypot(e["dentro"][0] - p.x, e["dentro"][1] - p.y) < 50:
@@ -2082,6 +2213,11 @@ class Jogo:
             return None
         melhor = None
         md = 999
+        for c in m.perto(m.carros_ch, p.x, p.y):
+            d = math.hypot(c["x"] - p.x, c["y"] - p.y)
+            if d < 46 and d < md:
+                md = d
+                melhor = ("carro", c)
         cx_, cy_ = int(p.x // CHPX), int(p.y // CHPX)
         perto_b = [b for yy in (cy_ - 1, cy_, cy_ + 1) for xx in (cx_ - 1, cx_, cx_ + 1) for b in m.pred_ch.get((xx, yy), ())]
         for b in perto_b:
@@ -2156,6 +2292,10 @@ class Jogo:
 
     def texto_interacao(self, alvo):
         tipo, obj = alvo
+        if tipo == "carro":
+            return f"[E] Entrar no carro (gasolina {int(obj.get('gas', 0))}%)"
+        if tipo == "sair_carro":
+            return "[E] Sair do carro"
         if tipo == "subir":
             return "[E] Subir no telhado pela escada"
         if tipo == "descer":
@@ -2197,6 +2337,12 @@ class Jogo:
         if not alvo:
             return
         tipo, obj = alvo
+        if tipo == "carro":
+            self.entrar_carro(obj)
+            return
+        if tipo == "sair_carro":
+            self.sair_carro()
+            return
         if tipo == "subir":
             self.telhado_b = obj
             self.p.x, self.p.y = obj["escada"]["dentro"]
@@ -2511,6 +2657,9 @@ class Jogo:
         p = self.p
         m = self.mundo
         mv, corre, mira, tiro, mouse = self.entrada()
+        if self.dirigindo:
+            self.dirigir(dt, mv)
+            mv, tiro, mira = (0, 0), False, False
         a_ = self.arma_atual()
         self.luneta = bool(mira and self.arma in self.miras and not a_["melee"])
         if self.acao and self.acao["tipo"] in ("hospital", "dormir"):
@@ -2959,7 +3108,8 @@ class Jogo:
                 rapido = 0.55 if getattr(z, "na_rua", False) and na_cidade else 0.3
                 self.passo_zumbi(z, z.ang, z.vel * rapido * dt * self.no_arame(z, dt), vagando=True)
             # ataque
-            if d < z.r + p.r + 8 and z.t_ataque <= 0 and not seguro and self.esquiva <= 0 and not self.telhado_b:
+            if d < z.r + p.r + 8 and z.t_ataque <= 0 and not seguro and self.esquiva <= 0 and not self.telhado_b \
+                    and not self.dirigindo:
                 z.t_ataque = {"gordo": 1.4, "corredor": 0.7, "gigante": 1.7}.get(z.tipo, 1.0)
                 dano_z = z.dano
                 if self.colete > 0:  # o colete segura boa parte da mordida
@@ -3562,7 +3712,15 @@ class Jogo:
             spr = self.rot(("ja", self.arma), agach[self.arma], math.degrees(p.ang), 4)
         else:
             spr = self.rot(("j", self.arma), self.spr_j[self.arma], math.degrees(p.ang), 4)
-        tela.blit(spr, (psx - spr.get_width() / 2, psy - spr.get_height() / 2))
+        if self.dirigindo:
+            c = self.dirigindo
+            base = self.mundo.base_carro[c["spr"]]
+            sc = self.rot(("carro", c["spr"]), base, -c["ang"], 4)
+            sombra = self.spr_sombra_gg
+            tela.blit(sombra, (psx - sombra.get_width() / 2 + 6, psy - sombra.get_height() / 2 + 8))
+            tela.blit(sc, (psx - sc.get_width() / 2, psy - sc.get_height() / 2))
+        else:
+            tela.blit(spr, (psx - spr.get_width() / 2, psy - spr.get_height() / 2))
         spr_jog = spr
         for c in self.construidos:
             if c["tipo"] == "barricada" and vis.collidepoint(c["x"], c["y"]):
@@ -3966,6 +4124,10 @@ class Jogo:
         mi = int((self.hora - h) * 60) // 10 * 10
         clima = "  ·  chuva" if self.chuva else ""
         self.texto(f"Dia {self.dia}  ·  {h:02d}:{mi:02d}  ·  {ESTACOES[self.estacao()][0]}{clima}", (64, 22), self.f_med)
+        if self.dirigindo:
+            g = self.dirigindo.get("gas", 0)
+            self.texto(f"CARRO  ·  gasolina {int(g)}%  ·  {int(abs(self.vel_carro) / 4)} km/h  ·  E sai",
+                       (W // 2, 120), self.f_med, (255, 120, 100) if g < 10 else (255, 230, 160), centro=True)
         prot = [t for t, v in (("Colete", self.colete), ("Capacete", self.capacete)) if v > 0]
         if prot:
             self.texto("  ·  ".join(f"{t} {int(v)}%" for t, v in (("Colete", self.colete), ("Capacete", self.capacete))
