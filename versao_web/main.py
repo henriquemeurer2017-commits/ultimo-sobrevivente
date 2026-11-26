@@ -132,6 +132,12 @@ async def main():
                 platform.window.esconderTelaCarga()
             except Exception:
                 pass
+        if n in (1, 30, 120):
+            try:  # garante que o jogo enche a tela (nao fica pequeno e achatado no meio)
+                import platform
+                platform.window.ajustarTela()
+            except Exception:
+                pass
         if time.time() - t > 2:
             t = time.time()
             guardar()

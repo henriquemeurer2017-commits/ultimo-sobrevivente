@@ -26,6 +26,28 @@ if os.path.exists(pagina):
     with open(pagina, encoding="utf-8") as f:
         html = f.read()
     html = html.replace("ume_block : 1,", "ume_block : 0,")
+    # o jogo comecava com metade do tamanho (gui_divider 2) e as vezes ficava pequeno e achatado
+    html = html.replace("gui_divider : 2,", "gui_divider : 1,")
+    ajuste = """
+<script>
+// sempre encher a tela: refaz a conta do tamanho quando a janela muda, ao entrar em tela cheia
+// e algumas vezes logo depois que a pagina abre (antes do jogo saber o tamanho certo)
+function ajustarTela() {
+    try {
+        if (window.config) window.config.gui_divider = 1;
+        const c = document.getElementById("canvas");
+        if (c && c.width && c.height && Math.abs(c.width / c.height - 1280 / 720) > 0.01) { c.width = 1280; c.height = 720; }
+        if (window.window_resize) window.window_resize();
+    } catch (e) {}
+}
+window.addEventListener("resize", () => setTimeout(ajustarTela, 150));
+document.addEventListener("fullscreenchange", () => setTimeout(ajustarTela, 150));
+let __ajustes = 0;
+const __timerAjuste = setInterval(() => { ajustarTela(); if (++__ajustes > 30) clearInterval(__timerAjuste); }, 1000);
+</script>
+</body>"""
+    if "function ajustarTela" not in html:
+        html = html.replace("</body>", ajuste, 1)
     html = html.replace("background-color:powderblue;", "background-color:#000; overflow:hidden;")
     html = html.replace('''            background: green;
             color: blue;''', '''            background: #1a1414;
