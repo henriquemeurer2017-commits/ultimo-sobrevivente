@@ -3072,6 +3072,7 @@ class Jogo:
         p = self.p
         m = self.mundo
         self.atualizar_metro()
+        self.atualizar_trens(dt)
         mv, corre, mira, tiro, mouse = self.entrada()
         if self.dirigindo:
             self.dirigir(dt, mv)
@@ -4362,6 +4363,8 @@ class Jogo:
             tela.blit(spr_jog, (psx - spr_jog.get_width() / 2, psy - spr_jog.get_height() / 2))
         if m.torre and vis.colliderect(pygame.Rect(m.torre["x"] * T, m.torre["y"] * T, 9 * T, 9 * T)):
             tela.blit(self.spr_torre, ((m.torre["x"] + 4.5) * T - camx - 75, (m.torre["y"] + 4.5) * T - camy - 75))
+        if self.metro is None:
+            self.desenhar_elevados(camx, camy, vis)
         # jogador debaixo de arvore/capim: contorno
         if m.no_capim(p.x, p.y) or self.debaixo_arvore():
             pygame.draw.circle(tela, (255, 255, 255), (int(psx), int(psy)), 15, 1)
@@ -4403,6 +4406,99 @@ class Jogo:
         if self.luneta:
             self.desenhar_luneta()
         self.desenhar_hud()
+
+    def pos_trem(self, el):
+        """Onde esta o trem desta linha agora: (comeco, fim) ao longo da linha, ou None se esta parado longe."""
+        comp_trem = 680
+        L = el["b"] - el["a"]
+        vel = 260.0
+        ida = (L + comp_trem) / vel
+        ciclo = 2 * ida + 30.0  # vai, espera, volta, espera
+        t = (self.__dict__.get("relogio_trem", 0.0) + el["fase"] * 7) % ciclo
+        if t < ida:
+            ini = el["a"] - comp_trem + t * vel
+        elif t < ida + 15:
+            return None
+        elif t < 2 * ida + 15:
+            ini = el["b"] - (t - ida - 15) * vel
+        else:
+            return None
+        return ini, ini + comp_trem
+
+    def desenhar_elevados(self, camx, camy, vis):
+        tela = self.tela
+        m = self.mundo
+        cache = self.__dict__.setdefault("spr_elevado", {})
+        for i, el in enumerate(getattr(m, "elevados", ())):
+            h_ = el["dir"] == "h"
+            ret = (pygame.Rect(el["a"], el["fixo"] - 75, el["b"] - el["a"], 150) if h_ else
+                   pygame.Rect(el["fixo"] - 75, el["a"], 150, el["b"] - el["a"]))
+            if not vis.colliderect(ret.inflate(80, 80)):
+                continue
+            if i not in cache:
+                rel = [(px - el["a"]) if h_ else (py - el["a"]) for px, py in el["pilares"]]
+                viga = G.sprite_elevado(el["b"] - el["a"], rel, T)
+                sombra = pygame.Surface(viga.get_size(), pygame.SRCALPHA)
+                sombra.fill((0, 0, 0, 255))
+                sombra.blit(viga, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+                sombra.fill((0, 0, 0, 70), special_flags=pygame.BLEND_RGBA_MIN)
+                trem = G.sprite_trem_elevado()
+                if not h_:
+                    viga = pygame.transform.rotate(viga, -90)
+                    sombra = pygame.transform.rotate(sombra, -90)
+                    trem = pygame.transform.rotate(trem, -90)
+                cache[i] = (viga, sombra, trem)
+            viga, sombra, trem = cache[i]
+            # sombra no chao, pe das torres, depois a viga la em cima
+            tela.blit(sombra, (ret.x - camx + 26, ret.y - camy + 34))
+            for px, py in el["pilares"]:
+                if vis.collidepoint(px, py):
+                    pygame.draw.circle(tela, (70, 66, 60), (int(px - camx + 6), int(py - camy + 8)), 22)
+                    pygame.draw.circle(tela, (120, 116, 106), (int(px - camx), int(py - camy)), 20)
+            tela.blit(viga, (ret.x - camx, ret.y - camy))
+            pt = self.pos_trem(el)
+            if pt:
+                ini, fim = pt
+                if h_:
+                    area = pygame.Rect(el["a"] - camx, ret.y - camy, el["b"] - el["a"], 150)
+                    pos = (ini - camx, el["fixo"] - 20 - camy)
+                else:
+                    area = pygame.Rect(ret.x - camx, el["a"] - camy, 150, el["b"] - el["a"])
+                    pos = (el["fixo"] - 20 - camx, ini - camy)
+                sh = self.__dict__.get("sombra_trem_" + el["dir"])
+                if sh is None:
+                    sh = pygame.Surface(trem.get_size(), pygame.SRCALPHA)
+                    sh.fill((0, 0, 0, 70))
+                    self.__dict__["sombra_trem_" + el["dir"]] = sh
+                tela.set_clip(area.move(26, 34))  # sombra do trem no chao
+                tela.blit(sh, (pos[0] + 26, pos[1] + 34))
+                tela.set_clip(area)  # o trem some no fim da linha
+                tela.blit(trem, pos)
+                tela.set_clip(None)
+
+    def atualizar_trens(self, dt):
+        """O trem elevado anda; quando passa perto, a tela treme, faz barulho e chama os zumbis."""
+        self.relogio_trem = self.__dict__.get("relogio_trem", 0.0) + dt
+        if self.metro is not None:
+            return
+        p = self.p
+        self.t_barulho_trem = self.__dict__.get("t_barulho_trem", 0.0) - dt
+        for el in getattr(self.mundo, "elevados", ()):
+            pt = self.pos_trem(el)
+            if not pt:
+                continue
+            meio = (pt[0] + pt[1]) / 2
+            x, y = (meio, el["fixo"]) if el["dir"] == "h" else (el["fixo"], meio)
+            d = math.hypot(x - p.x, y - p.y)
+            if d < 700:
+                self.tremor = max(self.tremor, 2.5 * (1 - d / 700))
+                if self.t_barulho_trem <= 0:
+                    self.t_barulho_trem = 2.2
+                    self.som("trem", 0.9 * (1 - d / 700))
+                    self.fazer_barulho(x, y, 380)
+                    if d < 450 and not self.__dict__.get("avisou_trem"):
+                        self.avisou_trem = True
+                        self.msg("Lá em cima passa o TREM ELEVADO! O barulho chama os zumbis.", (255, 220, 140))
 
     def desenhar_luneta(self):
         """Visao pela luneta: o que esta na mira fica grande, o resto fica preto."""

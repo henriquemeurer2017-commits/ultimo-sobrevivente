@@ -199,6 +199,7 @@ NOMES_MOVEIS = {
     "mochila": "sua mochila",
     "prateleira": "prateleira", "vitrine": "vitrine de armas",
     "despensa": "despensa do bunker", "arsenal": "arsenal do bunker",
+    "maquina": "máquina de lanche",
 }
 
 # espaco que cada unidade ocupa na mochila

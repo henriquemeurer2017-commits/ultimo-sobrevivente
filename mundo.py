@@ -385,6 +385,7 @@ class Mundo:
         self._mochilas_e_materiais()
         self._escadas()
         self._metro()
+        self._elevado()
 
         yield ("Preparando o desenho...")
         self._indexar()
@@ -764,21 +765,28 @@ class Mundo:
         w, h = G.METRO_W, G.METRO_H
         self.metros = []
         usados = []
+        lista = []
         for c in self.cidades:
-            if c["tipo"] == "vila":
-                continue
-            # entrada: na rua, perto do centro da cidade
+            if c["tipo"] != "vila":
+                lista += [c] * (3 if c["tipo"] == "metropole" else 2)
+        entradas = []
+        for c in lista:
+            # entrada: na rua, dentro da cidade (longe das outras entradas)
             ent = None
             for _ in range(4000):
-                tx = c["x"] + rnd.randint(-c["raio"] // 2, c["raio"] // 2)
-                ty = c["y"] + rnd.randint(-c["raio"] // 2, c["raio"] // 2)
+                tx = c["x"] + rnd.randint(-c["raio"] * 2 // 3, c["raio"] * 2 // 3)
+                ty = c["y"] + rnd.randint(-c["raio"] * 2 // 3, c["raio"] * 2 // 3)
                 x, y = tx * T + 16, ty * T + 16
                 if self.tile(tx, ty) not in (ASFALTO, TERRA, GRAMA) or self.ocup[ty, tx]:
                     continue
                 if self.bloqueado(x, y, 40) or self.bloqueado(x, y + 70, 16):
                     continue
+                if any(math.hypot(x - ex, y - ey) < 16 * T for ex, ey in entradas):
+                    continue
                 ent = (x, y)
                 break
+            if ent:
+                entradas.append(ent)
             if ent is None:
                 continue
             # a estacao: um canto de mata bem longe de tudo
@@ -819,9 +827,20 @@ class Mundo:
                     self.tn[y0 + ty, x0 + tx] = v
             self.ocup[y0 - 1:y0 + h + 1, x0 - 1:x0 + w + 1] = True
             self.res[y0 - 3:y0 + h + 3, x0 - 3:x0 + w + 3] = True
+            # o que ja estava jogado nesse pedaco de mata vai para a plataforma (nada fica preso dentro do trem)
+            for obj in list(self.itens_chao) + [mv for mv in self.moveis if "metro" not in mv]:
+                if (x0 - 1) * T <= obj["x"] < (x0 + w + 1) * T and (y0 - 1) * T <= obj["y"] < (y0 + h + 1) * T:
+                    obj["x"] = (x0 + rnd.uniform(2, w - 2)) * T
+                    obj["y"] = (y0 + rnd.choice([2.5, 3.5, 13.5])) * T
             saidas = [((x0 + cc) * T + 16, (y0 + 2) * T + 24) for cc in G.METRO_ESCADAS]
             idx = len(self.metros)
-            self.metros.append(dict(cidade=c["nome"], ent=ent, sala=(x0, y0, w, h), saidas=saidas, idx=idx))
+            n_ = sum(1 for o in self.metros if o.get("base") == c["nome"]) + 1
+            nome_est = c["nome"] if n_ == 1 else f"{c['nome']} {['', '', 'Norte', 'Sul', 'Leste'][min(n_, 4)]}"
+            self.metros.append(dict(cidade=nome_est, base=c["nome"], ent=ent, sala=(x0, y0, w, h), saidas=saidas, idx=idx))
+            # maquinas de lanche e de bebida na plataforma
+            for tx in (12, 34):
+                self.moveis.append(dict(id=len(self.moveis), x=(x0 + tx) * T + 16, y=(y0 + 1) * T + 18, tipo="maquina",
+                                        aberto=False, metro=idx, itens=sortear(rnd, LOOT["mercado"], rnd.randint(2, 4))))
             # coisas para revistar: armarios dos funcionarios, caixas, kit de primeiros socorros, banca de jornal
             for tipo, tx, ty, tab, n in (("armario", 2, 2, "casa", (2, 4)), ("armario", 3, 2, "casa", (2, 4)),
                                          ("medico", w - 3, 2, "medico", (2, 3)), ("caixa", 20, 3, "casa", (1, 3)),
@@ -829,6 +848,51 @@ class Mundo:
                                          ("militar", 2, 15, "militar", (2, 3))):
                 self.moveis.append(dict(id=len(self.moveis), x=(x0 + tx) * T + 16, y=(y0 + ty) * T + 16, tipo=tipo,
                                         aberto=False, metro=idx, itens=sortear(rnd, LOOT[tab], rnd.randint(*n))))
+
+    def _elevado(self):
+        """Trem elevado: trilho la no alto, em cima de torres de pedra com bracos grandes, cruzando as cidades."""
+        rnd = random.Random(self.seed + 4747)
+        self.elevados = []
+        k = 0
+        for c in self.cidades:
+            if c["tipo"] == "vila":
+                continue
+            direcoes = ("h", "v") if c["tipo"] == "metropole" else (("h", "v")[k % 2],)
+            k += 1
+            for d in direcoes:
+                desloc = rnd.randint(-c["raio"] // 4, c["raio"] // 4)
+                ext = c["raio"] + 14
+                if d == "h":
+                    y = (c["y"] + desloc) * T + 16
+                    a, b = (max(6, c["x"] - ext)) * T, (min(N - 7, c["x"] + ext)) * T
+                    pts = [(x, y) for x in range(a, b, 12 * T)]
+                else:
+                    x = (c["x"] + desloc) * T + 16
+                    a, b = (max(6, c["y"] - ext)) * T, (min(N - 7, c["y"] + ext)) * T
+                    pts = [(x, y) for y in range(a, b, 12 * T)]
+                pilares = []
+                for px, py in pts:
+                    # a torre fica onde da: se cair em cima de casa ou de agua, chega um pouco para o lado
+                    for off in (0, 2, -2, 4, -4):
+                        qx = px + (off * T if d == "h" else 0)
+                        qy = py + (off * T if d == "v" else 0)
+                        tx, ty = int(qx // T), int(qy // T)
+                        if not (0 <= tx < N and 0 <= ty < N):
+                            continue
+                        if self.ocup[max(0, ty - 1):ty + 2, max(0, tx - 1):tx + 2].any() or self.tile(tx, ty) in (AGUA, PONTE):
+                            continue
+                        pilares.append((qx, qy))
+                        for yy in range(ty - 1, ty + 2):
+                            for xx in range(tx - 1, tx + 2):
+                                i = yy * N + xx
+                                for dd in (self.arvores, self.pedras, self.arbustos, self.capim_g):
+                                    dd.pop(i, None)
+                                self.col.pop(i, None)
+                        self.add_colisor(qx, qy, 20)
+                        break
+                if len(pilares) >= 3:
+                    self.elevados.append(dict(dir=d, a=a, b=b, fixo=y if d == "h" else x, pilares=pilares,
+                                              fase=rnd.uniform(0, 100), cidade=c["nome"]))
 
     def metro_em(self, x, y):
         """Indice da estacao onde fica o ponto (x, y), ou None."""

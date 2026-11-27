@@ -31,6 +31,7 @@ class Piloto:
         self.mouse = (W / 2 + 100, H / 2)
         self.quer_metro = False
         self.metro_feito = False
+        self.carro_feito = False
         self.montar_tarefas()
 
     # ------------------------------------------------------------------ mapa para andar
@@ -169,6 +170,8 @@ class Piloto:
             p = j.p
             mt = min(m.metros, key=lambda mt: (mt["ent"][0] - p.x) ** 2 + (mt["ent"][1] - p.y) ** 2)
             tf.append(("metro", mt, f"Indo para o METRÔ da estação {mt['cidade']}"))
+        if not self.carro_feito:
+            tf.append(("carro", None, "Procurando um CARRO com gasolina para ir dirigindo"))
         tem_radio = j.__dict__.get("radio_consertado")
         for i, b in enumerate(m.bunkers):
             if j.inv.get("peca", 0) >= PECAS_RADIO or tem_radio:  # ja tem as pecas: direto para a torre
@@ -216,7 +219,7 @@ class Piloto:
         p = j.p
         mv, corre, mira, tiro = (0.0, 0.0), False, False, False
         self.cuidar_da_vida(dt)
-        luta = self.lutar()
+        luta = None if j.dirigindo else self.lutar()
         if j.cao and j.cao["amigo"]:  # o piloto manda o Thor atacar so quando esta lutando
             j.cao["modo"] = "ataque" if luta is not None else "quieto"
         if luta is not None:
@@ -421,10 +424,12 @@ class Piloto:
                 return self.ir_para(alvo, dt), True
             # chegou la embaixo: revista a estacao, atravessa ate a outra escada e sobe
             self.tarefas.pop(0)
-            novas = [("revistar", mv, f"Revistando a estação de metrô {obj['cidade']}")
+            sobra = j.capacidade() - j.espaco_usado()
+            novas = [] if sobra < 60 else [("revistar", mv, f"Revistando a estação de metrô {obj['cidade']}")
                      for mv in sorted((mv for mv in j.mundo.moveis if mv.get("metro") == obj["idx"] and not mv["aberto"]),
                                       key=lambda mv: mv["x"])]
-            novas.append(("sair_metro", obj, "Atravessando a estação até a outra escada"))
+            novas.append(("sair_metro", obj, "Atravessando a estação até a outra escada" if novas else
+                          "Mochila pequena: só atravessando a estação até a outra escada"))
             self.tarefas[0:0] = novas
             self.caminho = []
             return (0.0, 0.0), False
@@ -442,6 +447,8 @@ class Piloto:
                 self.espera = 1.0
                 return (0.0, 0.0), False
             return self.ir_para(alvo, dt), True
+        if tipo == "carro":
+            return self.tarefa_carro(dt)
         if tipo == "cama":
             if p.vida >= 95 and not p.sangrando:
                 self.tarefas.pop(0)
@@ -498,6 +505,105 @@ class Piloto:
                 self.status = f"Aguentando os zumbis: helicóptero em {int(j.resgate)} segundos"
             return (0.0, 0.0), False
         return (0.0, 0.0), False
+
+    def destino_da_viagem(self):
+        """Para onde ir de carro: o lugar da proxima tarefa."""
+        for tipo, obj, _ in self.tarefas[1:]:
+            if tipo == "revistar":
+                return self.ponto_do_movel(obj)
+            if tipo == "torre":
+                return ((obj["x"] + obj["w"] / 2) * self.T_, (obj["y"] + obj["h"] + 3) * self.T_)
+        return None
+
+    T_ = T
+
+    def tarefa_carro(self, dt):
+        j = self.j
+        p = j.p
+        m = j.mundo
+
+        def acabou(txt=None):
+            self.tarefas.pop(0)
+            self.carro_feito = True
+            self.caminho = []
+            self.carro_alvo = None
+            if txt:
+                j.msg(txt, (200, 220, 255))
+            return (0.0, 0.0), False
+
+        destino = self.destino_da_viagem()
+        if destino is None:
+            return acabou()
+        if not j.dirigindo:
+            c = self.__dict__.get("carro_alvo")
+            if c is None:
+                bons = [c for c in m.carros if c.get("gas", 0) >= 15 and (c["x"] - p.x) ** 2 + (c["y"] - p.y) ** 2 < 1600 ** 2]
+                if not bons:
+                    return acabou("Piloto: nenhum carro com gasolina por perto, vou a pé.")
+                c = self.carro_alvo = min(bons, key=lambda c: (c["x"] - p.x) ** 2 + (c["y"] - p.y) ** 2)
+                self.t_carro = 0.0
+            if self.__dict__.get("ja_dirigiu"):  # ja chegou de carro: desceu, segue a pe
+                return acabou()
+            self.status = "Indo até um CARRO com gasolina"
+            self.t_carro = self.__dict__.get("t_carro", 0.0) + dt
+            if self.t_carro > 60:  # nao conseguiu chegar no carro
+                return acabou()
+            if math.hypot(c["x"] - p.x, c["y"] - p.y) < 44:
+                al = j.alvo_interacao()
+                if al and al[0] == "carro":
+                    j.interagir()
+                    self.caminho = []
+                    self.t_dirigindo = 0.0
+                    self.t_preso_carro = 0.0
+                    self.re = 0.0
+                return (0.0, 0.0), False
+            alvo = None
+            for k in range(8):
+                ax, ay = c["x"] + math.cos(k * 0.785) * 40, c["y"] + math.sin(k * 0.785) * 40
+                if not m.bloqueado(ax, ay, 12):
+                    alvo = (ax, ay)
+                    break
+            return self.ir_para(alvo or (c["x"], c["y"] + 40), dt), True
+        # DIRIGINDO
+        c = j.dirigindo
+        self.ja_dirigiu = True
+        self.t_dirigindo = self.__dict__.get("t_dirigindo", 0.0) + dt
+        dist = math.hypot(destino[0] - p.x, destino[1] - p.y)
+        self.status = f"Dirigindo o carro! Faltam {int(dist / 32)} metros  ·  gasolina {int(c.get('gas', 0))}%"
+        if dist < 340 or self.t_dirigindo > 150 or c.get("gas", 0) <= 0:
+            if abs(j.vel_carro) > 25:  # freia antes de descer
+                return (0.0, 1.0), False
+            j.interagir()  # sai do carro
+            return acabou()
+        # direcao: segue o caminho (o mesmo do andar a pe)
+        self.ir_para(destino, dt)  # calcula o caminho (o mesmo do andar a pe)
+        # carro nao faz curva fechada: mira num ponto do caminho la na frente
+        while len(self.caminho) > 1 and math.hypot(self.caminho[0][0] - p.x, self.caminho[0][1] - p.y) < 80:
+            self.caminho.pop(0)
+        mira_pt = self.caminho[-1] if self.caminho else destino
+        for wx, wy in self.caminho:
+            if math.hypot(wx - p.x, wy - p.y) > 130:
+                mira_pt = (wx, wy)
+                break
+        dx, dy = mira_pt[0] - p.x, mira_pt[1] - p.y
+        quer = math.degrees(math.atan2(-dy, dx))
+        dif = (quer - c["ang"] + 180) % 360 - 180
+        vira = -max(-1.0, min(1.0, dif / 25))
+        # preso? da re um pouquinho
+        if self.__dict__.get("re", 0) > 0:
+            self.re -= dt
+            return (-vira, 1.0), False
+        if abs(j.vel_carro) < 15:
+            self.t_preso_carro = self.__dict__.get("t_preso_carro", 0.0) + dt
+            if self.t_preso_carro > 1.2:
+                self.t_preso_carro = 0.0
+                self.re = 0.8
+        else:
+            self.t_preso_carro = 0.0
+        if abs(dif) > 70 and j.vel_carro > 120:
+            return (vira, 1.0), False  # curva fechada: freia
+        acel = -1.0 if abs(dif) < 80 or j.vel_carro < 60 else 0.0
+        return (vira, acel), False
 
     def sub_alvo(self, alvo):
         """O proximo pedaco da viagem: um ponto da rota grossa uns 25 quadradinhos a frente (ou o destino)."""

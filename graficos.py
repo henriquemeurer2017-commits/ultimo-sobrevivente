@@ -905,6 +905,13 @@ def desenha_movel(s, tipo, aberto, x, y):
             for k, arma in enumerate(("fuzil", "rifle")):
                 desenha_icone(s, arma, x, y - 5 + k * 10, 0.9)
         pygame.draw.rect(s, (200, 190, 120), (x - 3, y - 11, 6, 3))
+    elif tipo == "maquina":  # maquina de lanche/bebida do metro
+        pygame.draw.rect(s, (30, 30, 36), (x - 15, y - 14, 30, 28), border_radius=3)
+        pygame.draw.rect(s, (190, 40, 40) if not aberto else (110, 40, 40), (x - 14, y - 13, 28, 26), border_radius=3)
+        pygame.draw.rect(s, (40, 60, 80), (x - 11, y - 10, 16, 18))
+        for k in range(3):
+            pygame.draw.rect(s, (230, 200, 80), (x - 9, y - 8 + k * 6, 12, 3))
+        pygame.draw.rect(s, (220, 220, 220), (x + 8, y - 8, 4, 8))
     elif tipo == "mochila":
         desenha_icone(s, "mochila", x, y, 1.3)
     elif tipo == "porta_malas":
@@ -1032,6 +1039,9 @@ def criar_sons():
             sons[f"gemido{i}"] = fazer(passa_baixa(onda, 4) * env, 0.32)
         t = t_(2.0)
         sons["chuva"] = fazer(passa_baixa(ruido(len(t)), 2), 0.12)
+        t = t_(2.5)
+        sons["trem"] = fazer(passa_baixa(ruido(len(t)), 10) * (0.55 + 0.45 * (np.sin(2 * np.pi * 2.2 * t) > 0.7))
+                             * np.minimum(1, np.minimum(t, 2.5 - t) * 2.5), 0.5)
         t = t_(1.0)
         sons["fogo"] = fazer(passa_baixa(ruido(len(t)), 8) * (0.6 + 0.4 * np.abs(np.sin(2 * np.pi * 3 * t))), 0.12)
         t = t_(1.2)
@@ -1139,6 +1149,7 @@ def sprite_estacao(T, seed=0):
             pygame.draw.ellipse(luz, (255, 250, 210, 34), luz.get_rect())
             pygame.draw.ellipse(luz, (255, 250, 210, 30), luz.get_rect().inflate(-40, -16))
             s.blit(luz, (x - 45, y - 20))
+    _detalhes_estacao(s, T)
     # o trem parado na linha 1
     y_tr = int(5.7 * T)
     larg = int(3.2 * T)
@@ -1170,4 +1181,87 @@ def sprite_entrada_metro():
     pygame.draw.circle(s, (240, 240, 250), (42, 10), 10, 2)
     pts = [(36, 15), (36, 5), (42, 11), (48, 5), (48, 15)]
     pygame.draw.lines(s, (250, 250, 255), False, pts, 2)
+    return s
+
+
+
+def _detalhes_estacao(s, T):
+    """Bancos, catracas, lixeiras e placas nas plataformas."""
+    w = METRO_W * T
+    for x in range(5 * T, w - 4 * T, 9 * T):  # bancos na plataforma de cima
+        pygame.draw.rect(s, (70, 50, 30), (x, 3 * T + 6, 2 * T, 12), border_radius=3)
+        pygame.draw.rect(s, (130, 96, 58), (x + 2, 3 * T + 8, 2 * T - 4, 8), border_radius=3)
+    for x in range(9 * T, w - 6 * T, 9 * T):  # bancos na plataforma de baixo
+        pygame.draw.rect(s, (70, 50, 30), (x, 15 * T + 6, 2 * T, 12), border_radius=3)
+        pygame.draw.rect(s, (130, 96, 58), (x + 2, 15 * T + 8, 2 * T - 4, 8), border_radius=3)
+    for c in METRO_ESCADAS:  # catracas na frente das escadas
+        for k in range(4):
+            x = (c - 1) * T + 6 + k * 22
+            pygame.draw.rect(s, (90, 94, 102), (x, 2 * T + 18, 14, 12), border_radius=2)
+            pygame.draw.rect(s, (150, 156, 166), (x + 2, 2 * T + 20, 10, 3))
+            pygame.draw.circle(s, (60, 200, 90), (x + 7, 2 * T + 26), 2)
+    for x in (16 * T, 28 * T, 44 * T):  # lixeiras
+        pygame.draw.circle(s, (40, 70, 40), (x, 4 * T), 9)
+        pygame.draw.circle(s, (70, 110, 70), (x, 4 * T), 7)
+    # mapa da linha na parede de baixo
+    pygame.draw.rect(s, (230, 230, 236), (18 * T, 16 * T + 4, 10 * T, 22))
+    pygame.draw.line(s, (200, 40, 40), (18 * T + 10, 16 * T + 15), (28 * T - 10, 16 * T + 15), 4)
+    for k in range(6):
+        pygame.draw.circle(s, (255, 255, 255), (18 * T + 14 + k * 58, 16 * T + 15), 5)
+        pygame.draw.circle(s, (200, 40, 40), (18 * T + 14 + k * 58, 16 * T + 15), 5, 2)
+
+
+def sprite_elevado(comp, pilares_rel, T=32):
+    """Viga do trem elevado (deitada, comprimento comp) com a cabeca das torres: bracos de pedra bem largos."""
+    larg = 46
+    s = pygame.Surface((comp, 150), pygame.SRCALPHA)
+    meio = 75
+    # bracos de pedra das torres (os 'galhos')
+    for px in pilares_rel:
+        pedra = (150, 146, 136)
+        escura = (96, 92, 84)
+        pygame.draw.polygon(s, escura, [(px - 18, meio), (px - 60, 6), (px - 44, 0), (px, meio - 10),
+                                        (px + 44, 0), (px + 60, 6), (px + 18, meio)])
+        pygame.draw.polygon(s, escura, [(px - 18, meio), (px - 60, 144), (px - 44, 150), (px, meio + 10),
+                                        (px + 44, 150), (px + 60, 144), (px + 18, meio)])
+        pygame.draw.polygon(s, pedra, [(px - 14, meio), (px - 54, 9), (px - 44, 5), (px, meio - 14),
+                                       (px + 44, 5), (px + 54, 9), (px + 14, meio)])
+        pygame.draw.polygon(s, pedra, [(px - 14, meio), (px - 54, 141), (px - 44, 145), (px, meio + 14),
+                                       (px + 44, 145), (px + 54, 141), (px + 14, meio)])
+        pygame.draw.circle(s, escura, (px, meio), 30)
+        pygame.draw.circle(s, pedra, (px, meio), 26)
+        for k in range(6):  # pedras desenhadas
+            a = k * 1.05
+            pygame.draw.circle(s, escura, (int(px + math.cos(a) * 15), int(meio + math.sin(a) * 15)), 6, 1)
+    # a viga
+    y0 = meio - larg // 2
+    pygame.draw.rect(s, (70, 72, 76), (0, y0, comp, larg))
+    pygame.draw.rect(s, (128, 130, 134), (0, y0 + 3, comp, larg - 6))
+    for x in range(0, comp, 16):  # dormentes
+        pygame.draw.rect(s, (84, 70, 54), (x, y0 + 8, 7, larg - 16))
+    for yr in (y0 + 14, y0 + larg - 14):
+        pygame.draw.rect(s, (80, 82, 88), (0, yr - 2, comp, 5))
+        pygame.draw.rect(s, (186, 190, 198), (0, yr - 1, comp, 2))
+    for x in range(0, comp, 8 * T):  # emendas da viga
+        pygame.draw.line(s, (60, 62, 66), (x, y0), (x, y0 + larg), 2)
+    pygame.draw.rect(s, (40, 42, 46), (0, y0, comp, larg), 2)
+    return s
+
+
+def sprite_trem_elevado(rnd=None):
+    """Trem do elevado: 3 vagoes deitados."""
+    rnd = rnd or random.Random(3)
+    comp, larg, gap = 220, 40, 10
+    s = pygame.Surface((comp * 3 + gap * 2, larg), pygame.SRCALPHA)
+    for k in range(3):
+        v = _vagao(comp, larg, rnd)
+        if k in (0, 2):  # frente arredondada
+            pass
+        s.blit(v, (k * (comp + gap), 0))
+    for k in range(2):
+        pygame.draw.rect(s, (30, 30, 34), ((k + 1) * comp + k * gap - 2, larg // 2 - 4, gap + 4, 8))
+    # farois
+    for x in (3, s.get_width() - 7):
+        pygame.draw.rect(s, (255, 240, 170), (x, 8, 4, 6))
+        pygame.draw.rect(s, (255, 240, 170), (x, larg - 14, 4, 6))
     return s
