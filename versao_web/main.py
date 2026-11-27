@@ -122,8 +122,18 @@ async def main():
             return
         except Exception:
             import traceback
-            log(traceback.format_exc())
-            raise
+            tb = traceback.format_exc()
+            log(tb)
+            # nao derruba o jogo: volta para o menu e mostra o erro na caixa vermelha (para o Claude consertar)
+            try:
+                linhas = tb.strip().splitlines()
+                onde = next((l.strip() for l in reversed(linhas) if l.strip().startswith("File")), "")
+                j.erro_carga = (linhas[-1][:110], onde[-90:], time.time())
+                j.mundo = None
+                j.ger_carga = None
+                j.estado = "menu"
+            except Exception:
+                raise
         n += 1
         if n == 1:
             log("primeiro quadro ok")
