@@ -755,6 +755,15 @@ class Jogo:
             if self.botao_peq("Jogar", pygame.Rect(r.right - 230, r.y + 10, 110, 36), (60, 90, 50)):
                 self.comecar_carga(self.carregar_passos(arq))
                 return
+            if NAVEGADOR and self.botao_peq("Copiar", pygame.Rect(r.right - 330, r.y + 10, 92, 36), (40, 50, 70)):
+                # copia o mundo (texto) para mandar para o Claude achar erros
+                try:
+                    import platform
+                    with open(arq, encoding="utf-8") as f_:
+                        platform.window.navigator.clipboard.writeText(f_.read())
+                    self.msg_copia = time.time()
+                except Exception:
+                    self.msg_copia = -time.time()
             certeza = self.__dict__.get("apagar_qual") == arq
             if self.botao_peq("Certeza?" if certeza else "Apagar", pygame.Rect(r.right - 112, r.y + 10, 100, 36),
                               (130, 30, 26) if certeza else (60, 34, 30)):
@@ -766,6 +775,10 @@ class Jogo:
                     self.apagar_qual = None
                 else:
                     self.apagar_qual = arq
+        mc = self.__dict__.get("msg_copia")
+        if mc and time.time() - abs(mc) < 8:
+            self.texto("Mundo copiado! Agora avise o Claude." if mc > 0 else "Não consegui copiar o mundo.",
+                       (W // 2, caixa.y - 12), self.f_med, (140, 230, 150) if mc > 0 else (255, 150, 140), centro=True)
         if len(mundos) > 5:
             self.texto(f"(+{len(mundos) - 5} mundos mais antigos)", (W // 2, caixa.bottom - 16), self.f_peq,
                        (170, 160, 150), centro=True)
