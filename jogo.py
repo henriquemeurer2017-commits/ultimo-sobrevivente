@@ -884,7 +884,7 @@ class Jogo:
             dificuldade=self.dificuldade,
             cao=dict(x=self.cao["x"], y=self.cao["y"], amigo=self.cao["amigo"], vida=self.cao.get("vida", 100),
                      fome=self.cao.get("fome", 100), sede=self.cao.get("sede", 100),
-                     morto=self.cao.get("morto", False)) if self.cao else None,
+                     morto=self.cao.get("morto", False), sentado=self.cao.get("sentado", False)) if self.cao else None,
             carros=[[i, round(c["x"], 1), round(c["y"], 1), round(c["ang"], 1), c.get("gas", 0)]
                     for i, c in enumerate(m.carros) if c.get("mexeu")],
             moedas=self.moedas, dono=self.dono, mochila_infinita=self.mochila_infinita,
@@ -1703,6 +1703,77 @@ class Jogo:
                    (caixa.x + 26, caixa.bottom - 30), self.f_peq, (170, 200, 230))
 
     # ================================================================ bancada
+    def cuidar_thor(self, oque, item):
+        obj = self.cao
+        if self.inv.get(item, 0) <= 0:
+            return
+        self.inv[item] -= 1
+        if self.inv[item] <= 0:
+            self.inv.pop(item)
+        if oque == "curar":
+            obj["vida"] = min(100.0, obj.get("vida", 100) + (70 if item == "kit" else 35))
+            self.msg("Você cuidou dos machucados do Thor.", (170, 240, 170))
+        elif oque == "comida":
+            obj["fome"] = min(100.0, obj.get("fome", 100) + 50)
+            self.msg("O Thor comeu tudinho! Ele abanou o rabo.", (255, 220, 140))
+        else:
+            obj["sede"] = min(100.0, obj.get("sede", 100) + 55)
+            self.msg("O Thor bebeu a água.", (160, 210, 255))
+        obj["au"] = 0.6
+        self.som("comer", 0.5)
+
+    def tela_menu_cao(self, dt):
+        tc = self.teclas
+        cao = self.cao
+        if pygame.K_ESCAPE in tc or pygame.K_e in tc or not cao or cao.get("morto") or self.__dict__.get("piloto"):
+            self.estado = "jogo"
+            return
+        self.desenhar()
+        tela = self.tela
+        caixa = pygame.Rect(W // 2 - 260, H // 2 - 200, 520, 400)
+        self.painel(caixa, 235)
+        self.texto("THOR", (caixa.x + 24, caixa.y + 12), self.f_grande, (255, 220, 140))
+        if self.botao_peq("Fechar (E)", pygame.Rect(caixa.right - 120, caixa.y + 16, 104, 36)):
+            self.estado = "jogo"
+            return
+        y = caixa.y + 74
+        for k_, (nome_, v_, cor_) in enumerate((("Vida", cao.get("vida", 100), (220, 60, 60)),
+                                                ("Fome", cao.get("fome", 100), (230, 160, 60)),
+                                                ("Sede", cao.get("sede", 100), (80, 150, 230)))):
+            self.texto(nome_, (caixa.x + 28, y), self.f_peq, (220, 210, 200))
+            pygame.draw.rect(tela, (20, 20, 20), (caixa.x + 100, y + 4, 300, 14), border_radius=5)
+            pygame.draw.rect(tela, cor_, (caixa.x + 100, y + 4, int(300 * max(0, v_) / 100), 14), border_radius=5)
+            self.texto(f"{int(v_)}", (caixa.x + 412, y), self.f_peq, (220, 210, 200))
+            y += 26
+        y += 12
+        sentado = cao.get("sentado", False)
+        cura = "kit" if self.inv.get("bandagem", 0) <= 0 and self.inv.get("kit", 0) > 0 else "bandagem"
+        opcoes = [
+            ("1", "Levantar e me seguir" if sentado else "Sentar e ficar aqui", "sentar", None, True),
+            ("2", f"Dar comida  (você tem {self.inv.get('comida', 0)})", "comida", "comida", self.inv.get("comida", 0) > 0),
+            ("3", f"Dar água  (você tem {self.inv.get('agua', 0)})", "agua", "agua", self.inv.get("agua", 0) > 0),
+            ("4", f"Curar com {ITENS[cura].lower()}  (você tem {self.inv.get(cura, 0)})", "curar", cura,
+             self.inv.get(cura, 0) > 0),
+        ]
+        teclas_n = (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4)
+        for k_, (tecla_, txt_, oque_, item_, pode_) in enumerate(opcoes):
+            r = pygame.Rect(caixa.x + 24, y, caixa.w - 48, 46)
+            apertou = self.botao_peq(f"{tecla_}  ·  {txt_}", r, (50, 60, 44), pode_) or (pode_ and teclas_n[k_] in tc)
+            if apertou:
+                if oque_ == "sentar":
+                    cao["sentado"] = not sentado
+                    cao["modo"] = "quieto"
+                    cao["au"] = 0.5
+                    self.msg("Thor, SENTA! Ele fica aqui te esperando." if cao["sentado"] else
+                             "Thor, vem! Ele voltou a te seguir.", (255, 220, 140))
+                    self.estado = "jogo"
+                    self.salvar()
+                    return
+                self.cuidar_thor(oque_, item_)
+            y += 54
+        self.texto("Dica: X manda ele atacar  ·  Z manda ele recuar para perto de você", (caixa.x + 26, caixa.bottom - 34),
+                   self.f_peq, (170, 200, 230))
+
     def tela_bancada(self, dt):
         tc = self.teclas
         if pygame.K_ESCAPE in tc or pygame.K_e in tc or pygame.K_v in tc:
@@ -1985,7 +2056,7 @@ class Jogo:
             if cao["t_pede"] <= 0 and (cao["fome"] < 35 or cao["sede"] < 35 or cao.get("vida", 100) < 40):
                 cao["t_pede"] = 40.0
                 falta = "machucado" if cao.get("vida", 100) < 40 else ("com fome" if cao["fome"] < 35 else "com sede")
-                self.msg(f"O Thor está {falta}! Chegue perto dele e aperte E.", (255, 200, 140))
+                self.msg(f"O Thor está {falta}! Chegue perto dele e aperte E para cuidar.", (255, 200, 140))
             # zumbi colado no Thor morde ele
             for z in self.zumbis:
                 if (z.x - cao["x"]) ** 2 + (z.y - cao["y"]) ** 2 < (z.r + 14) ** 2 and z.t_ataque <= 0:
@@ -2032,6 +2103,13 @@ class Jogo:
                         self.msg("O Thor derrubou um zumbi!", (255, 220, 140))
             else:
                 alvo_x, alvo_y, vel = z.x, z.y, 230.0
+        elif cao.get("sentado"):
+            pass  # sentadinho, esperando voce voltar
+        elif cao.get("recuar", 0) > 0:
+            cao["recuar"] -= dt
+            d = math.hypot(p.x - cao["x"], p.y - cao["y"])
+            if d > 40:
+                alvo_x, alvo_y, vel = p.x, p.y, 320.0
         else:
             d = math.hypot(p.x - cao["x"], p.y - cao["y"])
             ult = cao.get("ult_p", (p.x, p.y))
@@ -2045,12 +2123,32 @@ class Jogo:
             a = math.atan2(alvo_y - cao["y"], alvo_x - cao["x"])
             cao["ang"] = a
             nx, ny = cao["x"] + math.cos(a) * vel * dt, cao["y"] + math.sin(a) * vel * dt
-            if not m.bloqueado(nx, ny, 10):
+            x0, y0 = cao["x"], cao["y"]
+            if not m.bloqueado(nx, ny, 8):
                 cao["x"], cao["y"] = nx, ny
-            elif not m.bloqueado(nx, cao["y"], 10):
+            elif not m.bloqueado(nx, cao["y"], 8):
                 cao["x"] = nx
-            elif not m.bloqueado(cao["x"], ny, 10):
+            elif not m.bloqueado(cao["x"], ny, 8):
                 cao["y"] = ny
+            else:  # contorna o mato: tenta andar de lado
+                for da in (0.8, -0.8, 1.5, -1.5):
+                    tx, ty = cao["x"] + math.cos(a + da) * vel * dt, cao["y"] + math.sin(a + da) * vel * dt
+                    if not m.bloqueado(tx, ty, 8):
+                        cao["x"], cao["y"] = tx, ty
+                        break
+            # travou mesmo assim? depois de um tempinho ele pula para perto de voce
+            if math.hypot(cao["x"] - x0, cao["y"] - y0) < vel * dt * 0.3:
+                cao["preso"] = cao.get("preso", 0) + dt
+            else:
+                cao["preso"] = 0
+            if cao.get("preso", 0) > 1.2:
+                cao["preso"] = 0
+                for k_ in range(16):
+                    aa = k_ / 16 * 6.283
+                    tx, ty = p.x + math.cos(aa) * 40, p.y + math.sin(aa) * 40
+                    if not m.bloqueado(tx, ty, 10):
+                        cao["x"], cao["y"] = tx, ty
+                        break
             cao["passo"] += vel * dt / 14
 
     def capacidade(self):
@@ -2268,6 +2366,11 @@ class Jogo:
             self.cao["au"] = 0.8 if ataque else 0.0
             self.msg("THOR, ATACA! Ele vai morder os zumbis perto de você. (X de novo: quieto)" if ataque else
                      "Thor quieto: ele só te segue, sem latir. (X: ataca)", (255, 220, 140))
+        if pygame.K_z in tc and self.cao and self.cao["amigo"] and not self.cao.get("morto"):
+            self.cao["modo"] = "quieto"
+            self.cao["recuar"] = 4.0
+            self.cao["au"] = 0.0
+            self.msg("THOR, RECUA! Ele parou de atacar e voltou para perto de você.", (255, 220, 140))
         if pygame.K_t in tc:
             self.deitado = not self.__dict__.get("deitado", False)
             if self.deitado:
@@ -2417,6 +2520,12 @@ class Jogo:
 
     # ---------------------------------------------------------------- interacao
     def alvo_interacao(self):
+        r = self._alvo_interacao()
+        if r is None and self.cao and self.cao["amigo"] and not self.cao.get("morto") and not self.dirigindo                 and not self.telhado_b and math.hypot(self.cao["x"] - self.p.x, self.cao["y"] - self.p.y) < 60:
+            return ("cuidar_cao", self.cao)  # nada mais perto: o botao do Thor
+        return r
+
+    def _alvo_interacao(self):
         p = self.p
         m = self.mundo
         if self.dirigindo:
@@ -2436,8 +2545,8 @@ class Jogo:
         if self.cao and not self.cao.get("morto") and math.hypot(self.cao["x"] - p.x, self.cao["y"] - p.y) < 60:
             if not self.cao["amigo"]:
                 return ("cao", self.cao)
-            if self.cuidado_cao():
-                return ("cuidar_cao", self.cao)
+            if self.cuidado_cao() or self.cao.get("sentado"):
+                return ("cuidar_cao", self.cao)  # ele precisa de voce: o botao dele vem primeiro
         cx_, cy_ = int(p.x // CHPX), int(p.y // CHPX)
         perto_b = [b for yy in (cy_ - 1, cy_, cy_ + 1) for xx in (cx_ - 1, cx_, cx_ + 1) for b in m.pred_ch.get((xx, yy), ())]
         for b in perto_b:
@@ -2515,8 +2624,7 @@ class Jogo:
         if tipo == "cao":
             return "[E] Fazer carinho no cachorro (ele vira seu amigo)"
         if tipo == "cuidar_cao":
-            return {"curar": "[E] Curar o Thor", "comida": "[E] Dar comida para o Thor",
-                    "agua": "[E] Dar água para o Thor"}[self.cuidado_cao()[0]]
+            return "[E] Thor: sentar, comida, água, bandagem"
         if tipo == "carro":
             return f"[E] Entrar no carro (gasolina {int(obj.get('gas', 0))}%)"
         if tipo == "sair_carro":
@@ -2565,19 +2673,8 @@ class Jogo:
             return
         tipo, obj = alvo
         if tipo == "cuidar_cao":
-            oque, item = self.cuidado_cao()
-            self.inv[item] -= 1
-            if oque == "curar":
-                obj["vida"] = min(100.0, obj.get("vida", 100) + (70 if item == "kit" else 35))
-                self.msg("Você cuidou dos machucados do Thor.", (170, 240, 170))
-            elif oque == "comida":
-                obj["fome"] = min(100.0, obj.get("fome", 100) + 50)
-                self.msg("O Thor comeu tudinho! Ele abanou o rabo.", (255, 220, 140))
-            else:
-                obj["sede"] = min(100.0, obj.get("sede", 100) + 55)
-                self.msg("O Thor bebeu a água.", (160, 210, 255))
-            obj["au"] = 0.6
-            self.som("comer", 0.5)
+            self.estado = "menu_cao"
+            self.som("clique", 0.4)
             return
         if tipo == "cao":
             obj["amigo"] = True
@@ -4044,7 +4141,11 @@ class Jogo:
                 tela.blit(morto, (sx - morto.get_width() / 2, sy - morto.get_height() / 2))
             else:
                 spr = self.rot(("cao", int(cao["passo"]) % 2), self.spr_cao[int(cao["passo"]) % 2], math.degrees(cao["ang"]), 6)
+                if cao.get("sentado"):
+                    spr = pygame.transform.smoothscale(spr, (int(spr.get_width() * 0.8), int(spr.get_height() * 0.8)))
                 tela.blit(spr, (sx - spr.get_width() / 2, sy - spr.get_height() / 2))
+                if cao.get("sentado") and cao["amigo"]:
+                    self.texto("sentado", (sx, sy + 16), self.f_peq, (255, 230, 160), centro=True)
                 if cao["amigo"] and (cao.get("vida", 100) < 100 or cao.get("fome", 100) < 50 or cao.get("sede", 100) < 50):
                     for k_, (v_, cor_) in enumerate(((cao.get("vida", 100), (220, 60, 60)), (cao.get("fome", 100), (230, 160, 60)),
                                                     (cao.get("sede", 100), (80, 150, 230)))):
