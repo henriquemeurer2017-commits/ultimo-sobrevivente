@@ -95,7 +95,8 @@ class Mundo:
         nomes = NOMES_CIDADES[:]
         rnd.shuffle(nomes)
         # uma cidade grande (metropole), 5 cidades e 22 vilas
-        plano = [("metropole", 46)] + [("cidade", 30)] * 5 + [("vila", 17)] * 22
+        f_ = (N / 768) ** 2  # mapa maior: mais cidades e vilas
+        plano = [("metropole", 46)] + [("cidade", 30)] * round(5 * f_) + [("vila", 17)] * round(22 * f_)
         for tipo, raio in plano:
             for _ in range(3000):
                 x = rnd.randint(50, N - 51)
@@ -105,7 +106,7 @@ class Mundo:
                 sub = t[y - raio:y + raio + 1, x - raio:x + raio + 1]
                 if (sub == AGUA).mean() > 0.01:
                     continue
-                nome = NOME_METROPOLE if tipo == "metropole" else nomes.pop()
+                nome = NOME_METROPOLE if tipo == "metropole" else (nomes.pop() if nomes else f"Vila {len(self.cidades)}")
                 self.cidades.append(dict(nome=nome, x=x, y=y, raio=raio, tipo=tipo))
                 break
 
@@ -341,9 +342,10 @@ class Mundo:
         yield ("Espalhando armas e suprimentos pelo chao...")
         self.itens_chao = []
         tent = 0
-        while len(self.itens_chao) < 3800 and tent < 90000:
+        f_ = (N / 768) ** 2
+        while len(self.itens_chao) < 3800 * f_ and tent < 90000 * f_:
             tent += 1
-            if len(self.itens_chao) < 2250:
+            if len(self.itens_chao) < 2250 * f_:
                 tx = rnd.randint(5, N - 6)
                 ty = rnd.randint(5, N - 6)
             else:
@@ -592,6 +594,21 @@ class Mundo:
                 arsenal = [["fuzil" if i >= 1 else "espingarda", 1], ["556", 90], ["12", 18], ["silenciador", 1], ["saco", 1]]
                 if i >= 2 or porte == "grande":
                     arsenal += [["rifle", 1], ["308", 25]]
+            # MAIS ARMAS no arsenal (sem sorteio, para os mundos salvos continuarem iguais)
+            arsenal += [["pistola", 1], ["9mm", 40], ["revolver", 1], ["38", 24], ["facao", 1]]
+            if porte != "pequeno":
+                arsenal += [["smg", 1], ["9mm", 60], ["besta", 1], ["flecha", 20], ["espingarda", 1], ["12", 20]]
+            if i >= 2:
+                arsenal += [["fuzil", 1], ["556", 60]]
+            if i >= 3 or porte == "grande":
+                arsenal += [["katana", 1], ["rifle", 1], ["308", 20]]
+            vistos_, limpo_ = set(), []
+            for it_, q_ in arsenal:  # cada arma uma vez so (a municao repetida soma)
+                if it_ in ARMAS_IDS and it_ in vistos_:
+                    continue
+                vistos_.add(it_)
+                limpo_.append([it_, q_])
+            arsenal = limpo_
             if porte == "grande" or rnd.random() < 0.3:
                 arsenal.append(["seringa", 1])
             arsenal.append(["mochila2" if i == 0 else ("mochila3" if i in (1, 3) else "mochila4"), 1])

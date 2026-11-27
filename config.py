@@ -15,6 +15,18 @@ CH = 16                # pedaco (chunk) de 16x16 quadradinhos
 CHPX = CH * T
 EXPLO = 4              # celula do "mapa explorado" = 4x4 quadradinhos
 NE = N // EXPLO
+N_CAP1 = 768           # tamanho do mapa no capitulo 1
+N_CAP2 = 1024          # capitulo 2 (dimensao sombria): mapa bem maior
+
+
+def definir_tamanho(n):
+    """Troca o tamanho do mapa em todos os arquivos do jogo (cada capitulo tem o seu)."""
+    import sys
+    for nome in ("config", "mundo", "jogo", "piloto", "graficos", "__main__"):
+        mod = sys.modules.get(nome)
+        if mod is not None and hasattr(mod, "N"):
+            mod.N = n
+            mod.NE = n // EXPLO
 
 # ---- tipos de chao ----
 GRAMA, MATO, AREIA, AGUA, TERRA, PONTE, ASFALTO, PISO_MAD, PISO_HOSP, PISO_CONC, PAREDE, PAREDE_CONC, PORTA = range(13)
@@ -35,6 +47,12 @@ NOMES_CIDADES = [
     "Lagoa Seca", "Bom Jesus", "Alto Alegre", "Vila Nova", "Ponte Alta", "Cruz das Almas", "Pinhal",
     "Rio Fundo", "Céu Azul", "Morro Velho", "Areia Branca", "Sol Nascente", "Barro Preto", "Campo Largo",
     "Ouro Fino", "Palmeiras", "Cachoeira", "Ventania", "Riacho Doce", "Esperança", "Toca da Onça",
+    # mais nomes para o mapa grande do capitulo 2 (a dimensao sombria)
+    "Vale das Sombras", "Pedra Negra", "Lua Vermelha", "Brejo Escuro", "Serra Roxa", "Poço Fundo",
+    "Fim do Mundo", "Cinzas", "Corvo Branco", "Névoa Alta", "Rio das Almas", "Campo Morto", "Sete Cruzes",
+    "Vila Fantasma", "Ponte Quebrada", "Mata Fechada", "Monte Sombrio", "Lagoa Negra", "Trevas",
+    "Barranco", "Pedra Torta", "Santa Luzia", "São Bento", "Bela Vista", "Nova Era", "Porto Seguro",
+    "Ribeirão", "Capão Bonito", "Itapuã", "Jardim", "Mirante", "Alvorada",
 ]
 NOME_METROPOLE = "Nova Capital"
 
@@ -225,7 +243,7 @@ RECEITAS = [
     dict(id="arame", nome="Arame farpado", custo={"sucata": 3}),
     dict(id="ponte", nome="Ponte de madeira", custo={"tabua": 4}),
     dict(id="bancada", nome="Bancada", custo={"tabua": 10, "sucata": 6, "ferramentas": 1}),
-    dict(id="muro", nome="Muro", custo={"tabua": 4, "sucata": 2}),
+    dict(id="muro", nome="Muro (bloco)", custo={"tabua": 4, "sucata": 2}),
     dict(id="portao", nome="Portão", custo={"tabua": 5, "sucata": 3}),
     dict(id="bau", nome="Baú", custo={"tabua": 8}),
     dict(id="espinhos", nome="Espinhos", custo={"sucata": 2, "tabua": 1}),

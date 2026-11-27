@@ -859,7 +859,8 @@ class Jogo:
         for _ in self.novo_jogo_passos(seed):
             pass
 
-    def novo_jogo_passos(self, seed=None):
+    def novo_jogo_passos(self, seed=None, tamanho=None):
+        definir_tamanho(tamanho or N_CAP1)
         seed = seed if seed is not None else random.randrange(1, 10 ** 9)
         yield from self.preparar_passos(seed)
         m = self.mundo
@@ -950,6 +951,7 @@ class Jogo:
             self.msg("Save estragado, começando de novo.")
             yield from self.novo_jogo_passos()
             return
+        definir_tamanho(N_CAP2 if d.get("capitulo", 1) == 2 else N_CAP1)
         yield from self.preparar_passos(d["seed"])
         m = self.mundo
         cresceu = d.get("tam", 512) != N
@@ -2489,7 +2491,9 @@ class Jogo:
         if pygame.K_b in tc:
             self.modo_construir = None if self.modo_construir is not None else 0
             if self.modo_construir is not None:
-                self.msg("Construir: 1 barricada · 2 fogueira · 3 bunker · 4 arame · 5 ponte. Clique para colocar.",
+                self.msg("CONSTRUIR SUA BASE: escolha na lista (teclas 1 a 0 ou clique) e clique no chão.",
+                         (200, 230, 255))
+                self.msg("Muro = bloquinho (fica colocando um do lado do outro). Faça uma BANCADA para melhorar as armas!",
                          (200, 230, 255))
 
     def trocar_arma(self, ida):
@@ -2936,7 +2940,7 @@ class Jogo:
             if not self.__dict__.get("radio_consertado"):
                 self.inv["peca"] -= PECAS_RADIO
             self.radio_consertado = True  # se voce morrer, da para chamar o helicoptero de novo
-            self.resgate = TEMPO_RESGATE
+            self.resgate = TEMPO_RESGATE * (1.25 if self.capitulo == 2 else 1.0)  # na dimensao sombria demora mais
             self.hora = 9.0  # o resgate acontece de dia: da para ver os zumbis chegando
             self.chuva = False
             self.msg("RÁDIO: \"Recebido! Helicóptero a caminho. Aguente firme!\"", (255, 230, 120))
@@ -3036,9 +3040,9 @@ class Jogo:
         """Alguns zumbis nascem com taco/machado na mao, capacete ou colete."""
         if self.capitulo == 2 and not getattr(z, "forte", False):  # dimensao sombria: zumbi mais forte e rapido
             z.forte = True
-            z.hp *= 1.35
-            z.vel *= 1.1
-            z.dano *= 1.2
+            z.hp *= 1.5
+            z.vel *= 1.15
+            z.dano *= 1.35
         if z.tipo in ("gigante", "cuspidor", "gritador", "bombeiro"):
             return z
         r = random.random()
@@ -3330,6 +3334,10 @@ class Jogo:
             self.acao["t"] += dt
             if self.acao["t"] >= self.acao["total"]:
                 self.terminar_acao()
+        if not self.__dict__.get("dica_base") and self.inv.get("tabua", 0) >= 8:  # dica: da para construir a base
+            self.dica_base = True
+            self.msg("DICA: você já tem tábuas! Aperte B para CONSTRUIR SUA BASE (muros, portão, espinhos, bancada...).",
+                     (255, 230, 140))
         # pegar itens no chao (pendurado no helicoptero nao pega nada)
         for it in (() if self.__dict__.get("embarcou") else m.perto(m.itens_ch, p.x, p.y, 0)):
             if not it.get("pego") and (it["x"] - p.x) ** 2 + (it["y"] - p.y) ** 2 < 24 * 24:
@@ -3568,7 +3576,7 @@ class Jogo:
         if na_cidade:
             base = {"metropole": 14, "cidade": 9}.get(cid["tipo"], 7)
             alvo = max(alvo, round(base + min(self.dia * 0.2, 3) + 1 * esc))
-        alvo = round(alvo * DIFICULDADES.get(self.dificuldade, {}).get("zumbis", 1.0))
+        alvo = round(alvo * DIFICULDADES.get(self.dificuldade, {}).get("zumbis", 1.0) * (1.3 if self.capitulo == 2 else 1.0))
         if self.resgate is not None:
             alvo = round(10 * DIFICULDADES.get(self.dificuldade, {}).get("zumbis", 1.0))  # no resgate: sem multidao
         seguro = self.em_zona_segura(p.x, p.y)
@@ -4119,7 +4127,7 @@ class Jogo:
         semente = (self.mundo.seed * 7 + 13) % (10 ** 9) if self.mundo else None
 
         def passos():
-            yield from self.novo_jogo_passos(seed=semente)
+            yield from self.novo_jogo_passos(seed=semente, tamanho=N_CAP2)
             for k, v in leva.items():
                 if k == "nome":
                     self.nome_mundo = v + " · Cap. 2"
@@ -4938,12 +4946,12 @@ class Jogo:
         painel = pygame.Surface((330, 40 + 34 * len(RECEITAS)), pygame.SRCALPHA)
         painel.fill((10, 12, 16, 200))
         self.tela.blit(painel, (W // 2 - 165, y))
-        self.texto("CONSTRUIR (B ou ESC sai)", (W // 2, y + 18), self.f_med, centro=True)
+        self.texto("CONSTRUIR SUA BASE (B ou ESC sai)", (W // 2, y + 18), self.f_med, centro=True)
         for i, r in enumerate(RECEITAS):
             custo = ", ".join(f"{q} {ITENS[k].lower()}" for k, q in r["custo"].items())
             pode = all(self.inv.get(k, 0) >= q for k, q in r["custo"].items())
             cor = (255, 240, 160) if i == self.modo_construir else ((210, 230, 210) if pode else (150, 140, 140))
-            self.texto(f"{i + 1}. {r['nome']}: {custo}", (W // 2 - 150, y + 40 + i * 32), self.f_peq, cor)
+            self.texto(f"{(i + 1) % 10}. {r['nome']}: {custo}", (W // 2 - 150, y + 40 + i * 32), self.f_peq, cor)
 
     def atualizar_heli(self, dt):
         """Helicoptero: chega voando, para em cima de voce, desce a corda, o soldado atira nos zumbis,
