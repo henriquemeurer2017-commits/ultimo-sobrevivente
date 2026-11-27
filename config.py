@@ -135,6 +135,12 @@ MOEDAS_ZERAR = 6          # moedas ganhas cada vez que zera o jogo (resgate)
 # lanternas: (nome, alcance da luz, abertura, pisca falhando?)
 LANTERNAS = [("Lanterna velha", 330, 0.34, True), ("Lanterna boa", 480, 0.42, False),
              ("Lanterna tática", 640, 0.50, False), ("Holofote militar", 840, 0.58, False)]
+# dificuldade do mundo (escolhida ao criar): quantidade de zumbis, forca da mordida, fome/sede, visao dos zumbis
+DIFICULDADES = {
+    "facil": dict(nome="Fácil", zumbis=0.6, dano=0.6, fome=0.7, visao=0.8, cor=(110, 200, 110)),
+    "medio": dict(nome="Médio", zumbis=1.0, dano=1.0, fome=1.0, visao=1.0, cor=(230, 200, 90)),
+    "dificil": dict(nome="Difícil", zumbis=1.5, dano=1.45, fome=1.3, visao=1.25, cor=(230, 80, 70)),
+}
 # bancada: coisas para fabricar (id, nome, explicacao, custo)
 FABRICAR = [
     ("colete", "Colete de sucata", "Você leva quase metade do dano dos zumbis.", {"sucata": 12, "ferramentas": 2}),

@@ -640,7 +640,15 @@ class Jogo:
             linhas = linhas[:3]
         for k, ln in enumerate(linhas[:3]):
             self.texto(ln, (campo.x + 14, campo.y + 8 + k * 34), self.f_med2, (240, 235, 225) if nome else (120, 115, 110))
-        criar = self.botao_peq("Criar mundo", pygame.Rect(campo.right + 12, campo.y + 34, 248, 46), (60, 90, 50))
+        escolha = self.__dict__.get("dif_novo", "medio")
+        self.texto("Dificuldade:", (campo.right + 12, campo.y - 2), self.f_peq, (220, 210, 190))
+        for k, (id_d, d_) in enumerate(DIFICULDADES.items()):
+            r = pygame.Rect(campo.right + 12 + k * 84, campo.y + 20, 80, 32)
+            if self.botao_peq(d_["nome"], r, (90, 70, 30) if escolha == id_d else (44, 40, 38)):
+                self.dif_novo = escolha = id_d
+            if escolha == id_d:
+                pygame.draw.rect(self.tela, d_["cor"], r, 2, border_radius=7)
+        criar = self.botao_peq("Criar mundo", pygame.Rect(campo.right + 12, campo.y + 62, 248, 46), (60, 90, 50))
         if criar or (pygame.K_RETURN in self.teclas):
             nome_final = nome.strip() or f"Mundo {len(mundos) + 1}"
             self.arq = self.arquivo_novo()
@@ -648,6 +656,8 @@ class Jogo:
 
             def criar():
                 yield from self.novo_jogo_passos()
+                self.dificuldade = escolha
+                self.msg(f"Dificuldade: {DIFICULDADES[escolha]['nome']}", DIFICULDADES[escolha]["cor"])
                 self.salvar()
             self.comecar_carga(criar())
             return
@@ -780,6 +790,7 @@ class Jogo:
         self.niveis = {}
         self.telhado_b = None   # predio em cujo telhado voce esta
         self.dirigindo = None   # carro que voce esta dirigindo
+        self.dificuldade = "medio"
         self.nivel_lanterna = 0
         self.cao = None         # o cachorro: {x, y, amigo, ang, t_mordida, t_latido, au}
         self.vel_carro = 0.0
@@ -866,6 +877,7 @@ class Jogo:
             feridas=[self.p.sangrando, self.p.perna, self.p.braco],
             niveis=self.niveis, miras=self.miras, reforco_mochila=self.reforco_mochila,
             colete=self.colete, capacete=self.capacete, radio_consertado=self.__dict__.get("radio_consertado", False), calca=self.calca, nivel_lanterna=self.nivel_lanterna,
+            dificuldade=self.dificuldade,
             cao=dict(x=self.cao["x"], y=self.cao["y"], amigo=self.cao["amigo"]) if self.cao else None,
             carros=[[i, round(c["x"], 1), round(c["y"], 1), round(c["ang"], 1), c.get("gas", 0)]
                     for i, c in enumerate(m.carros) if c.get("mexeu")],
@@ -939,6 +951,7 @@ class Jogo:
                 self.estacionar(m.carros[i], x_, y_, a_, g_, tirar=True)
         self.capacete = d.get("capacete", 0.0)
         self.calca = d.get("calca", 0.0)
+        self.dificuldade = d.get("dificuldade", "medio")
         self.miras = d.get("miras", [])
         self.reforco_mochila = d.get("reforco_mochila", 0)
         self.dono = d.get("dono", False)  # o modo dono vale so neste mundo
@@ -2914,8 +2927,9 @@ class Jogo:
             p.folego = min(100, p.folego + (14 if not movendo else 8) * dt)
         # fome e sede
         est = ESTACOES[self.estacao()]
-        p.fome = max(0, p.fome - 100 / FOME_SEG * dt * est[3])
-        p.sede = max(0, p.sede - 100 / SEDE_SEG * dt * (1.6 if correndo else 1.0) * est[4])
+        dif = DIFICULDADES.get(self.dificuldade, DIFICULDADES["medio"])
+        p.fome = max(0, p.fome - 100 / FOME_SEG * dt * est[3] * dif["fome"])
+        p.sede = max(0, p.sede - 100 / SEDE_SEG * dt * (1.6 if correndo else 1.0) * est[4] * dif["fome"])
         if self.estacao() != self.estacao_atual:
             if self.estacao_atual is not None:
                 dica = {"Verão": " Calor: você tem mais sede.", "Inverno": " Frio: você tem mais fome.",
@@ -3195,8 +3209,9 @@ class Jogo:
         if na_cidade:
             base = {"metropole": 14, "cidade": 9}.get(cid["tipo"], 7)
             alvo = max(alvo, round(base + min(self.dia * 0.2, 3) + 1 * esc))
+        alvo = round(alvo * DIFICULDADES.get(self.dificuldade, {}).get("zumbis", 1.0))
         if self.resgate is not None:
-            alvo = 10  # no resgate vem zumbi, mas nao uma multidao
+            alvo = round(10 * DIFICULDADES.get(self.dificuldade, {}).get("zumbis", 1.0))  # no resgate: sem multidao
         seguro = self.em_zona_segura(p.x, p.y)
         calma = dl < 0.05 and self.resgate is None
         if calma != self.na_calma:
@@ -3214,7 +3229,7 @@ class Jogo:
             else:
                 self.t_spawn = 5.0
             self.criar_zumbi(esc)
-        visao = 190 * (1 - esc) + esc * (150 if self.lanterna else 95)
+        visao = (190 * (1 - esc) + esc * (150 if self.lanterna else 95)) * DIFICULDADES.get(self.dificuldade, {}).get("visao", 1.0)
         if self.chuva:
             visao *= 0.8
         if m.no_capim(p.x, p.y):
@@ -3297,7 +3312,7 @@ class Jogo:
             if d < z.r + p.r + 8 and z.t_ataque <= 0 and not seguro and self.esquiva <= 0 and not self.telhado_b \
                     and not self.dirigindo:
                 z.t_ataque = {"gordo": 1.4, "corredor": 0.7, "gigante": 1.7}.get(z.tipo, 1.0)
-                dano_z = z.dano
+                dano_z = z.dano * DIFICULDADES.get(self.dificuldade, {}).get("dano", 1.0)
                 if self.calca > 0:  # a calca reforcada segura um pouco
                     dano_z *= 0.85
                     self.calca = max(0.0, self.calca - z.dano * 0.4)
@@ -4339,6 +4354,8 @@ class Jogo:
         mi = int((self.hora - h) * 60) // 10 * 10
         clima = ("  ·  neve" if self.estacao() == 2 else "  ·  chuva") if self.chuva else ""
         self.texto(f"Dia {self.dia}  ·  {h:02d}:{mi:02d}  ·  {ESTACOES[self.estacao()][0]}{clima}", (64, 22), self.f_med)
+        d_ = DIFICULDADES.get(self.dificuldade, DIFICULDADES["medio"])
+        self.texto(d_["nome"], (430, 52), self.f_peq, d_["cor"])
         if self.dirigindo:
             g = self.dirigindo.get("gas", 0)
             self.texto(f"CARRO  ·  gasolina {int(g)}%  ·  {int(abs(self.vel_carro) / 4)} km/h  ·  E sai",

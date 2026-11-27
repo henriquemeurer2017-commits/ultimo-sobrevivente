@@ -537,6 +537,17 @@ class Mundo:
                 mv["itens"].append(["capacete", 1])
             elif mv["tipo"] == "prateleira" and (mv.get("predio") or {}).get("tipo") == "shopping" and r < 0.35:
                 mv["itens"].append(["calca" if r < 0.2 else "colete", 1])
+        # clareira em volta da torre de radio (sem arvores e pedras em volta: da para chegar e se defender)
+        if self.torre:
+            t_ = self.torre
+            for ty in range(t_["y"] - 9, t_["y"] + t_["h"] + 9):
+                for tx in range(t_["x"] - 9, t_["x"] + t_["w"] + 9):
+                    if 0 <= tx < N and 0 <= ty < N:
+                        i = ty * N + tx
+                        if i in self.arvores or i in self.pedras:
+                            self.arvores.pop(i, None)
+                            self.pedras.pop(i, None)
+                            self.col.pop(i, None)
         # seringas rarissimas nos hospitais
         medicos = [mv for mv in self.moveis if mv["tipo"] == "medico" and (mv.get("predio") or {}).get("tipo") != "militar"]
         rnd.shuffle(medicos)
