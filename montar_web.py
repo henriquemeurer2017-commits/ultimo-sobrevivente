@@ -69,9 +69,12 @@ window.jogadoresTotal = 0;
     function online() {
         const m = Math.floor(Date.now() / 60000);
         const k = base + "%s/ultimo-sobrevivente-jogo/on";
-        fetch(k.replace("%s", "hit") + m).catch(() => {});
+        if (localStorage.getItem("ultimo_on_minuto") !== String(m)) {  // cada aparelho conta 1 vez por minuto
+            localStorage.setItem("ultimo_on_minuto", String(m));
+            fetch(k.replace("%s", "hit") + m).catch(() => {});
+        }
         Promise.all([m - 1, m].map(x => fetch(k.replace("%s", "get") + x).then(r => r.json()).catch(() => ({}))))
-            .then(l => { window.jogandoAgora = Math.max(1, ...l.map(d => (d && d.value) || 0)); });
+            .then(l => { window.jogandoAgora = Math.max(1, (l[0] && l[0].value) || 0); });  // o minuto que ja terminou
     }
     online();
     setInterval(online, 60000);
