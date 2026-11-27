@@ -149,7 +149,9 @@ FABRICAR = [
     ("flechas", "10 flechas", "Munição da besta.", {"tabua": 2, "sucata": 1}),
 ]
 # o que da para construir na base direto da bancada
-BASE_BANCADA = ["muro", "portao", "bau", "arame", "barricada", "fogueira", "abrigo"]
+BASE_BANCADA = ["muro", "espinhos", "portao", "bau", "arame", "barricada", "fogueira", "abrigo"]
+# construcoes que da para colocar uma atras da outra (sem sair do modo construir) e alinhadas no chao
+EM_SERIE = ("muro", "espinhos", "arame", "barricada", "ponte", "portao")
 # bancada: nivel maximo das melhorias
 NIVEL_MAX = 3
 MOCHILA_EXTRA = 40      # espaco a mais por nivel de reforco da mochila
@@ -224,5 +226,6 @@ RECEITAS = [
     dict(id="muro", nome="Muro", custo={"tabua": 4, "sucata": 2}),
     dict(id="portao", nome="Portão", custo={"tabua": 5, "sucata": 3}),
     dict(id="bau", nome="Baú", custo={"tabua": 8}),
+    dict(id="espinhos", nome="Espinhos", custo={"sucata": 2, "tabua": 1}),
 ]
 RAIO_ABRIGO = 260

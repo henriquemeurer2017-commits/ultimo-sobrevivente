@@ -162,6 +162,7 @@ class Jogo:
         self.spr_portao_aberto = G.sprite_portao(True)
         self.spr_bau = G.sprite_bau()
         self.spr_arame = G.sprite_arame()
+        self.spr_espinhos = G.sprite_espinhos()
         self.spr_ponte = G.sprite_ponte()
         self.spr_torre = G.sprite_torre()
         self.spr_cama_h = G.sprite_cama(True)
@@ -878,7 +879,9 @@ class Jogo:
             niveis=self.niveis, miras=self.miras, reforco_mochila=self.reforco_mochila,
             colete=self.colete, capacete=self.capacete, radio_consertado=self.__dict__.get("radio_consertado", False), calca=self.calca, nivel_lanterna=self.nivel_lanterna,
             dificuldade=self.dificuldade,
-            cao=dict(x=self.cao["x"], y=self.cao["y"], amigo=self.cao["amigo"]) if self.cao else None,
+            cao=dict(x=self.cao["x"], y=self.cao["y"], amigo=self.cao["amigo"], vida=self.cao.get("vida", 100),
+                     fome=self.cao.get("fome", 100), sede=self.cao.get("sede", 100),
+                     morto=self.cao.get("morto", False)) if self.cao else None,
             carros=[[i, round(c["x"], 1), round(c["y"], 1), round(c["ang"], 1), c.get("gas", 0)]
                     for i, c in enumerate(m.carros) if c.get("mexeu")],
             moedas=self.moedas, dono=self.dono, mochila_infinita=self.mochila_infinita,
@@ -1948,10 +1951,51 @@ class Jogo:
                 break
         self.cao = dict(x=x, y=y, amigo=False, ang=0.0, t_mordida=0.0, t_latido=0.0, au=0.0, t_aviso=0.0, passo=0.0)
 
+    def cuidado_cao(self):
+        """O que o Thor precisa agora e com o que da para dar: ("curar"/"comida"/"agua", item) ou None."""
+        cao = self.cao
+        if not cao or cao.get("morto"):
+            return None
+        inv = self.inv
+        if cao.get("vida", 100) < 85:
+            for item in ("bandagem", "kit"):
+                if inv.get(item, 0) > 0:
+                    return ("curar", item)
+        if cao.get("fome", 100) < 70 and inv.get("comida", 0) > 0:
+            return ("comida", "comida")
+        if cao.get("sede", 100) < 70 and inv.get("agua", 0) > 0:
+            return ("agua", "agua")
+        return None
+
     def atualizar_cachorro(self, dt):
         cao = self.cao
         if not cao:
             return
+        if cao.get("morto"):
+            return
+        if cao["amigo"]:  # o Thor sente fome e sede; sem comer ou beber ele vai ficando fraco
+            cao["fome"] = max(0.0, cao.get("fome", 100) - 100 / 2400 * dt)
+            cao["sede"] = max(0.0, cao.get("sede", 100) - 100 / 1800 * dt)
+            if cao["fome"] <= 0 or cao["sede"] <= 0:
+                cao["vida"] = cao.get("vida", 100) - 0.5 * dt
+            cao["t_pede"] = cao.get("t_pede", 0) - dt
+            if cao["t_pede"] <= 0 and (cao["fome"] < 35 or cao["sede"] < 35 or cao.get("vida", 100) < 40):
+                cao["t_pede"] = 40.0
+                falta = "machucado" if cao.get("vida", 100) < 40 else ("com fome" if cao["fome"] < 35 else "com sede")
+                self.msg(f"O Thor está {falta}! Chegue perto dele e aperte E.", (255, 200, 140))
+            # zumbi colado no Thor morde ele
+            for z in self.zumbis:
+                if (z.x - cao["x"]) ** 2 + (z.y - cao["y"]) ** 2 < (z.r + 14) ** 2 and z.t_ataque <= 0:
+                    z.t_ataque = 1.3
+                    cao["vida"] = cao.get("vida", 100) - z.dano * 0.8
+                    self.particula(cao["x"], cao["y"], random.uniform(-40, 40), random.uniform(-40, 40), 0.4, (150, 10, 12), 3)
+                    break
+            if cao.get("vida", 100) <= 0:
+                cao["morto"] = True
+                cao["vida"] = 0
+                self.msg("O THOR MORREU... :( Cuide bem dele da próxima vez.", (255, 120, 110))
+                self.som("dor", 0.6)
+                return
         m = self.mundo
         p = self.p
         cao["au"] = max(0.0, cao["au"] - dt)
@@ -2386,8 +2430,11 @@ class Jogo:
             if d < 46 and d < md:
                 md = d
                 melhor = ("carro", c)
-        if self.cao and not self.cao["amigo"] and math.hypot(self.cao["x"] - p.x, self.cao["y"] - p.y) < 60:
-            return ("cao", self.cao)
+        if self.cao and not self.cao.get("morto") and math.hypot(self.cao["x"] - p.x, self.cao["y"] - p.y) < 60:
+            if not self.cao["amigo"]:
+                return ("cao", self.cao)
+            if self.cuidado_cao():
+                return ("cuidar_cao", self.cao)
         cx_, cy_ = int(p.x // CHPX), int(p.y // CHPX)
         perto_b = [b for yy in (cy_ - 1, cy_, cy_ + 1) for xx in (cx_ - 1, cx_, cx_ + 1) for b in m.pred_ch.get((xx, yy), ())]
         for b in perto_b:
@@ -2426,7 +2473,7 @@ class Jogo:
                 if d < 60 and d < md:
                     md = d
                     melhor = (c["tipo"], c)
-            elif c["tipo"] in ("barricada", "fogueira", "arame", "muro"):
+            elif c["tipo"] in ("barricada", "fogueira", "arame", "muro", "espinhos"):
                 d = math.hypot(c["x"] - p.x, c["y"] - p.y)
                 if d < 56 and d < md:
                     md = d
@@ -2464,6 +2511,9 @@ class Jogo:
         tipo, obj = alvo
         if tipo == "cao":
             return "[E] Fazer carinho no cachorro (ele vira seu amigo)"
+        if tipo == "cuidar_cao":
+            return {"curar": "[E] Curar o Thor", "comida": "[E] Dar comida para o Thor",
+                    "agua": "[E] Dar água para o Thor"}[self.cuidado_cao()[0]]
         if tipo == "carro":
             return f"[E] Entrar no carro (gasolina {int(obj.get('gas', 0))}%)"
         if tipo == "sair_carro":
@@ -2511,6 +2561,21 @@ class Jogo:
         if not alvo:
             return
         tipo, obj = alvo
+        if tipo == "cuidar_cao":
+            oque, item = self.cuidado_cao()
+            self.inv[item] -= 1
+            if oque == "curar":
+                obj["vida"] = min(100.0, obj.get("vida", 100) + (70 if item == "kit" else 35))
+                self.msg("Você cuidou dos machucados do Thor.", (170, 240, 170))
+            elif oque == "comida":
+                obj["fome"] = min(100.0, obj.get("fome", 100) + 50)
+                self.msg("O Thor comeu tudinho! Ele abanou o rabo.", (255, 220, 140))
+            else:
+                obj["sede"] = min(100.0, obj.get("sede", 100) + 55)
+                self.msg("O Thor bebeu a água.", (160, 210, 255))
+            obj["au"] = 0.6
+            self.som("comer", 0.5)
+            return
         if tipo == "cao":
             obj["amigo"] = True
             obj["au"] = 1.2
@@ -2785,7 +2850,8 @@ class Jogo:
                 self.msg(f"Sem munição! Procure {ITENS[a['mun']]}.", (230, 170, 150))
                 self.cd = 0.4
             return
-        self.pente[self.arma] -= 1
+        if not self.dono:  # modo dono: bala infinita
+            self.pente[self.arma] -= 1
         self.cd = a["cd"]
         sil = self.arma in self.silen
         disp = a["disp"] * (0.35 if mira else 1.0) * (1.7 if movendo and not mira else 1.0) * (2.0 if p.braco else 1.0)
@@ -3155,10 +3221,16 @@ class Jogo:
             return
         for i, q in rec["custo"].items():
             self.inv[i] -= q
-        if rec["id"] == "ponte":
+        if rec["id"] == "ponte" or rec["id"] in EM_SERIE:  # alinha no quadradinho do chao
             wx = (int(wx // T)) * T + 16
             wy = (int(wy // T)) * T + 16
+            if any(c_["tipo"] == rec["id"] and abs(c_["x"] - wx) < 2 and abs(c_["y"] - wy) < 2 for c_ in self.construidos):
+                for i, q in rec["custo"].items():  # ja tem um igual aqui: devolve o material
+                    self.inv[i] += q
+                return
         c = dict(tipo=rec["id"], x=wx, y=wy, ang=math.degrees(p.ang) + 90)
+        if rec["id"] in ("muro", "portao"):  # muro reto: de pe ou deitado
+            c["ang"] = 90.0 if abs(math.cos(p.ang)) > abs(math.sin(p.ang)) else 0.0
         self.construir(c)
         self.som("golpe", 0.8)
         self.msg(f"Construiu: {rec['nome']}!", (200, 255, 200))
@@ -3168,8 +3240,9 @@ class Jogo:
             self.msg("Zumbi que passar no arame se machuca e fica lento.", (200, 230, 255))
         if rec["id"] == "bancada":
             self.msg("Bancada pronta! Chegue perto e aperte E para melhorar armas e a mochila.", (200, 230, 255))
-        if rec["id"] in ("muro", "portao"):
-            self.msg("Gire o personagem (mouse) para escolher a direção. Monte sua base!", (200, 230, 255))
+        if rec["id"] == "espinhos":
+            self.msg("Espinhos! Zumbi que pisar se machuca MUITO e fica lento.", (200, 230, 255))
+        if rec["id"] in EM_SERIE:  # continua construindo: clique de novo para o proximo (B ou ESC para sair)
             return
         if rec["id"] == "bau":
             self.msg("Baú pronto! Aperte E perto dele para guardar suas coisas.", (200, 230, 255))
@@ -3187,6 +3260,7 @@ class Jogo:
             tx, ty = int(x // T), int(y // T)
             return any(m.tile(tx + dx, ty + dy) != AGUA for dy in range(-2, 3) for dx in range(-2, 3))
         r = {"barricada": 14, "fogueira": 14, "abrigo": 40, "arame": 10, "bancada": 20, "muro": 14, "portao": 14,
+             "espinhos": 8,
              "bau": 16}[tipo]
         if m.bloqueado(x, y, r):
             return False
@@ -3239,7 +3313,7 @@ class Jogo:
         if self.__dict__.get("deitado"):
             visao *= 0.3
         zonas = list(self.zonas_seguras())
-        self.arames = [c for c in self.construidos if c["tipo"] == "arame"]
+        self.arames = [c for c in self.construidos if c["tipo"] in ("arame", "espinhos")]
         remover = []
         for z in self.zumbis:
             dx = p.x - z.x
@@ -3251,6 +3325,7 @@ class Jogo:
             z.flash -= dt
             z.t_ataque -= dt
             z.t_pensar -= dt
+            self.dano_arame(z, dt)
             # zona segura: afasta
             fugir = None
             for zx, zy, zr in zonas:
@@ -3365,13 +3440,20 @@ class Jogo:
                             b.x += ux
                             b.y += uy
 
-    def no_arame(self, z, dt):
-        """Arame farpado: machuca e deixa o zumbi lento."""
+    def dano_arame(self, z, dt):
+        """Espinhos/arame: machucam o zumbi todo quadro, parado ou andando."""
         for c in self.arames:
             if (c["x"] - z.x) ** 2 + (c["y"] - z.y) ** 2 < 34 * 34:
-                z.hp -= 18 * dt
+                z.hp -= (50 if c["tipo"] == "espinhos" else 18) * dt
+                z.flash = 0.05
                 if random.random() < dt * 3:
                     self.particula(z.x, z.y, random.uniform(-30, 30), random.uniform(-30, 30), 0.4, (120, 20, 16), 3)
+                return
+
+    def no_arame(self, z, dt):
+        """Arame farpado/espinhos: deixam o zumbi lento."""
+        for c in self.arames:
+            if (c["x"] - z.x) ** 2 + (c["y"] - z.y) ** 2 < 34 * 34:
                 return 0.3
         return 1.0
 
@@ -3872,6 +3954,8 @@ class Jogo:
                 elif c["tipo"] == "arame":
                     spr = self.rot(("arame",), self.spr_arame, c["ang"] - 90, 3)
                     tela.blit(spr, (c["x"] - camx - spr.get_width() / 2, c["y"] - camy - spr.get_height() / 2))
+                elif c["tipo"] == "espinhos":
+                    tela.blit(self.spr_espinhos, (c["x"] - camx - 18, c["y"] - camy - 18))
                 elif c["tipo"] == "abrigo":
                     tela.blit(self.spr_abrigo, (c["x"] - camx - 56, c["y"] - camy - 56))
                 elif c["tipo"] == "bancada":
@@ -3885,9 +3969,22 @@ class Jogo:
                                                                  and math.hypot(cao["x"] - p.x, cao["y"] - p.y) < 30):
             sx, sy = cao["x"] - camx, cao["y"] - camy
             tela.blit(self.spr_sombra, (sx - self.spr_sombra.get_width() / 2 + 3, sy - self.spr_sombra.get_height() / 2 + 5))
-            spr = self.rot(("cao", int(cao["passo"]) % 2), self.spr_cao[int(cao["passo"]) % 2], math.degrees(cao["ang"]), 6)
-            tela.blit(spr, (sx - spr.get_width() / 2, sy - spr.get_height() / 2))
-            if cao["au"] > 0:
+            if cao.get("morto"):
+                morto = self.__dict__.get("spr_cao_morto")
+                if morto is None:
+                    morto = pygame.transform.rotate(self.spr_cao[0], 90)
+                    morto.fill((110, 100, 100, 255), special_flags=pygame.BLEND_RGBA_MULT)
+                    self.spr_cao_morto = morto
+                tela.blit(morto, (sx - morto.get_width() / 2, sy - morto.get_height() / 2))
+            else:
+                spr = self.rot(("cao", int(cao["passo"]) % 2), self.spr_cao[int(cao["passo"]) % 2], math.degrees(cao["ang"]), 6)
+                tela.blit(spr, (sx - spr.get_width() / 2, sy - spr.get_height() / 2))
+                if cao["amigo"] and (cao.get("vida", 100) < 100 or cao.get("fome", 100) < 50 or cao.get("sede", 100) < 50):
+                    for k_, (v_, cor_) in enumerate(((cao.get("vida", 100), (220, 60, 60)), (cao.get("fome", 100), (230, 160, 60)),
+                                                    (cao.get("sede", 100), (80, 150, 230)))):
+                        pygame.draw.rect(tela, (20, 20, 20), (sx - 17, sy - 34 + k_ * 5, 34, 4))
+                        pygame.draw.rect(tela, cor_, (sx - 17, sy - 34 + k_ * 5, int(34 * max(0, v_) / 100), 4))
+            if cao["au"] > 0 and not cao.get("morto"):
                 self.texto("AU AU!", (sx, sy - 30), self.f_med, (255, 230, 120), centro=True)
             elif not cao["amigo"] and math.hypot(cao["x"] - p.x, cao["y"] - p.y) < 400:
                 self.texto("?", (sx, sy - 28), self.f_med, (200, 230, 255), centro=True)
@@ -4084,6 +4181,7 @@ class Jogo:
         ok = self.lugar_ok(rec["id"], wx, wy) and all(self.inv.get(i, 0) >= q for i, q in rec["custo"].items())
         spr = {"barricada": self.rot(("bar",), self.spr_barricada, math.degrees(p.ang), 3), "fogueira": self.spr_fogueira,
                "abrigo": self.spr_abrigo, "arame": self.rot(("arame",), self.spr_arame, math.degrees(p.ang), 3),
+               "espinhos": self.spr_espinhos,
                "ponte": self.spr_ponte, "bancada": self.spr_bancada,
                "muro": self.rot(("muro",), self.spr_muro, math.degrees(p.ang), 3),
                "portao": self.rot(("portao",), self.spr_portao, math.degrees(p.ang), 3),
@@ -4355,14 +4453,14 @@ class Jogo:
         clima = ("  ·  neve" if self.estacao() == 2 else "  ·  chuva") if self.chuva else ""
         self.texto(f"Dia {self.dia}  ·  {h:02d}:{mi:02d}  ·  {ESTACOES[self.estacao()][0]}{clima}", (64, 22), self.f_med)
         d_ = DIFICULDADES.get(self.dificuldade, DIFICULDADES["medio"])
-        self.texto(d_["nome"], (430, 52), self.f_peq, d_["cor"])
+        self.texto(d_["nome"], (24, 96), self.f_peq, d_["cor"])
         if self.dirigindo:
             g = self.dirigindo.get("gas", 0)
             self.texto(f"CARRO  ·  gasolina {int(g)}%  ·  {int(abs(self.vel_carro) / 4)} km/h  ·  E sai",
                        (W // 2, 120), self.f_med, (255, 120, 100) if g < 10 else (255, 230, 160), centro=True)
         prot = [(t, v) for t, v in (("Colete", self.colete), ("Capacete", self.capacete), ("Calça", self.calca)) if v > 0]
         if prot:
-            self.texto("  ·  ".join(f"{t} {int(v)}%" for t, v in prot), (24, 96), self.f_peq, (170, 220, 255))
+            self.texto("  ·  ".join(f"{t} {int(v)}%" for t, v in prot), (100, 96), self.f_peq, (170, 220, 255))
         self.texto(f"zumbis: {self.mortes}", (380, 24), self.f_peq, (200, 170, 160))
         self.painel(pygame.Rect(W - 207, 238, 194, 34))
         pygame.draw.circle(tela, (120, 90, 20), (W - 186, 255), 10)

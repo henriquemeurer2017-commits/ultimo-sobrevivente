@@ -782,6 +782,18 @@ def luneta_mascara(raio):
     return s
 
 
+def sprite_espinhos():
+    """Tabua com pontas de ferro para cima (vista de cima)."""
+    s = pygame.Surface((36, 36), pygame.SRCALPHA)
+    pygame.draw.rect(s, (70, 48, 28), (2, 2, 32, 32), border_radius=3)
+    pygame.draw.rect(s, (120, 84, 48), (3, 3, 30, 30), border_radius=3)
+    for yy in range(7, 32, 8):
+        for xx in range(7, 32, 8):
+            pygame.draw.polygon(s, (40, 40, 44), [(xx - 4, yy + 3), (xx + 4, yy + 3), (xx, yy - 5)])
+            pygame.draw.polygon(s, (190, 194, 204), [(xx - 2, yy + 2), (xx + 2, yy + 2), (xx, yy - 4)])
+    return s
+
+
 def sprite_fogueira():
     s = pygame.Surface((40, 40), pygame.SRCALPHA)
     for i in range(10):
