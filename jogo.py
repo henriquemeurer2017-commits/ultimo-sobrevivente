@@ -691,6 +691,13 @@ class Jogo:
         self.desenhar_fundo_menu(dt)
         self.titulo_menu(140)
         self.texto(f"Olá, {self.nick()}!", (W // 2, 248), self.f_med, (140, 230, 150), centro=True)
+        erro = self.__dict__.get("erro_carga")
+        if erro and time.time() - erro[2] < 60:  # nao conseguiu abrir o mundo: mostra o porque (para consertar)
+            caixa = pygame.Rect(W // 2 - 560, 556, 1120, 64)
+            self.painel(caixa, 230)
+            self.texto("Não consegui abrir o mundo. Tire uma foto desta mensagem e mande para o Claude:", (W // 2, 562),
+                       self.f_peq, (255, 150, 140), centro=True)
+            self.texto(f"{erro[0]}  ·  {erro[1]}", (W // 2, 590), self.f_peq, (255, 220, 200), centro=True)
         self.texto("um apocalipse zumbi em mundo aberto", (W // 2, 205), self.f_med2, (210, 200, 190), centro=True)
         y = 290
         if self.botao("Jogar", W // 2, y):
@@ -855,7 +862,11 @@ class Jogo:
             except Exception:
                 pass
             print(traceback.format_exc())
+            linhas = traceback.format_exc().strip().splitlines()
+            onde = next((l.strip() for l in reversed(linhas) if l.strip().startswith("File")), "")
+            self.erro_carga = (linhas[-1][:110], onde[-90:], time.time())
             self.ger_carga = None
+            self.mundo = None
             self.estado = "menu"
 
     def tela_confirmar(self, dt):
