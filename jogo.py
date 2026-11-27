@@ -793,6 +793,7 @@ class Jogo:
         self.digitado = ""
         self.niveis = {}
         self.telhado_b = None   # predio em cujo telhado voce esta
+        self.metro = None       # estacao de metro onde voce esta (debaixo da terra)
         self.dirigindo = None   # carro que voce esta dirigindo
         self.dificuldade = "medio"
         self.nivel_lanterna = 0
@@ -870,8 +871,10 @@ class Jogo:
                   for mv in m.moveis[self.n_moveis_base:] if mv["tipo"] == "mochila" and not mv["aberto"]]
         dados = dict(
             versao=1, tam=N, seed=m.seed,
-            x=self.telhado_b["escada"]["fora"][0] if self.telhado_b else self.p.x,
-            y=self.telhado_b["escada"]["fora"][1] if self.telhado_b else self.p.y, vida=self.p.vida, fome=self.p.fome, sede=self.p.sede,
+            x=self.telhado_b["escada"]["fora"][0] if self.telhado_b else
+            self.mundo.metros[self.metro]["ent"][0] if self.metro is not None else self.p.x,
+            y=self.telhado_b["escada"]["fora"][1] if self.telhado_b else
+            self.mundo.metros[self.metro]["ent"][1] + 70 if self.metro is not None else self.p.y, vida=self.p.vida, fome=self.p.fome, sede=self.p.sede,
             inv=self.inv, armas=self.armas, pente=self.pente, silen=self.silen, arma=self.arma, hora=self.hora,
             dia=self.dia, mortes=self.mortes, vezes_morto=self.vezes_morto, revelados=self.revelados,
             respawn=self.respawn, abertos=[mv["id"] for mv in m.moveis[:self.n_moveis_base] if mv["aberto"]],
@@ -2535,6 +2538,16 @@ class Jogo:
             if e and math.hypot(e["dentro"][0] - p.x, e["dentro"][1] - p.y) < 50:
                 return ("descer", self.telhado_b)
             return None
+        if self.metro is not None:
+            mt = m.metros[self.metro]
+            for sx_, sy_ in mt["saidas"]:
+                if math.hypot(sx_ - p.x, sy_ - p.y) < 50:
+                    return ("subir_metro", mt)
+        elif not self.__dict__.get("piloto"):
+            for mt in getattr(m, "metros", ()):
+                ex_, ey_ = mt["ent"]
+                if abs(ex_ - p.x) < 300 and math.hypot(ex_ - p.x, ey_ + 30 - p.y) < 56:
+                    return ("descer_metro", mt)
         melhor = None
         md = 999
         for c in m.perto(m.carros_ch, p.x, p.y):
@@ -2629,6 +2642,10 @@ class Jogo:
             return f"[E] Entrar no carro (gasolina {int(obj.get('gas', 0))}%)"
         if tipo == "sair_carro":
             return "[E] Sair do carro"
+        if tipo == "descer_metro":
+            return f"[E] Descer a escada do metrô (estação {obj['cidade']})"
+        if tipo == "subir_metro":
+            return "[E] Subir a escada para a rua"
         if tipo == "subir":
             return "[E] Subir no telhado pela escada"
         if tipo == "descer":
@@ -2688,6 +2705,21 @@ class Jogo:
             return
         if tipo == "sair_carro":
             self.sair_carro()
+            return
+        if tipo in ("descer_metro", "subir_metro"):
+            if tipo == "descer_metro":
+                x_, y_ = obj["saidas"][0]
+            else:
+                x_, y_ = obj["ent"][0], obj["ent"][1] + 70
+            self.p.x, self.p.y = x_, y_
+            cao = self.cao
+            if cao and cao["amigo"] and not cao.get("morto") and not cao.get("sentado"):
+                cao["x"], cao["y"] = x_ + 30, y_ + 10
+            self.agachado = False
+            self.acao = None
+            self.som("clique", 0.5)
+            self.cam = [x_, y_]
+            self.atualizar_metro()
             return
         if tipo == "subir":
             self.telhado_b = obj
@@ -3039,6 +3071,7 @@ class Jogo:
     def atualizar(self, dt):
         p = self.p
         m = self.mundo
+        self.atualizar_metro()
         mv, corre, mira, tiro, mouse = self.entrada()
         if self.dirigindo:
             self.dirigir(dt, mv)
@@ -3657,9 +3690,41 @@ class Jogo:
         if vagando:
             z.ang = random.uniform(0, 6.283)
 
+    def atualizar_metro(self):
+        """Ve se voce esta na estacao de metro; ao descer ou subir, troca os zumbis."""
+        m = self.mundo
+        p = self.p
+        novo = m.metro_em(p.x, p.y) if getattr(m, "metros", None) else None
+        if novo == self.metro:
+            return
+        self.metro = novo
+        self.zumbis = []
+        if novo is None:
+            self.msg("Você voltou para a rua.", (220, 230, 200))
+            return
+        mt = m.metros[novo]
+        self.msg(f"ESTAÇÃO {mt['cidade'].upper()}: o trem está parado. Cuidado, tem zumbi aqui embaixo!",
+                 (255, 210, 140))
+        x0, y0, w, h = mt["sala"]
+        qtd = round(11 * DIFICULDADES.get(self.dificuldade, {}).get("zumbis", 1.0))
+        for _ in range(400):
+            if len(self.zumbis) >= qtd:
+                break
+            x = (x0 + random.uniform(1.5, w - 1.5)) * T
+            y = (y0 + random.uniform(1.5, h - 1.5)) * T
+            if math.hypot(x - p.x, y - p.y) < 420 or m.bloqueado(x, y, 14):
+                continue
+            r = random.random()
+            tipo = "corredor" if r < 0.15 else "gordo" if r < 0.35 else "normal"
+            z = self.equipar_zumbi(Zumbi(x, y, tipo, random.randrange(len(self.spr_z[tipo])), random))
+            z.parado = random.random() < 0.6
+            self.zumbis.append(z)
+
     def criar_zumbi(self, esc):
         p = self.p
         m = self.mundo
+        if self.metro is not None:  # la embaixo so tem os zumbis que ja estavam na estacao
+            return
         for _ in range(12):
             a = random.uniform(0, 6.283)
             if self.resgate is not None:
@@ -4090,6 +4155,27 @@ class Jogo:
                 continue
             break
         vis = pygame.Rect(camx - 80, camy - 80, W + 160, H + 160)
+        for mt in getattr(m, "metros", ()):
+            x0_, y0_, w_, h_ = mt["sala"]
+            ret_ = pygame.Rect(x0_ * T, y0_ * T, w_ * T, h_ * T)
+            if vis.colliderect(ret_):
+                spm = self.__dict__.setdefault("spr_metro", {})
+                if mt["idx"] not in spm:
+                    sp_ = G.sprite_estacao(T, m.seed + mt["idx"])
+                    nome_ = self.f_med.render(f"ESTAÇÃO {mt['cidade'].upper()}", True, (240, 240, 250))
+                    for k_ in range(2):
+                        xx_ = (12 + k_ * 22) * T
+                        pygame.draw.rect(sp_, (20, 60, 140), (xx_ - 8, 2, nome_.get_width() + 16, 26), border_radius=4)
+                        sp_.blit(nome_, (xx_, 3))
+                    spm[mt["idx"]] = sp_
+                tela.blit(spm[mt["idx"]], (ret_.x - camx, ret_.y - camy))
+            ex_, ey_ = mt["ent"]
+            if vis.collidepoint(ex_, ey_):
+                spe = self.__dict__.get("spr_entrada_metro")
+                if spe is None:
+                    spe = self.spr_entrada_metro = G.sprite_entrada_metro()
+                tela.blit(spe, (ex_ - camx - 42, ey_ - camy - 55))
+                self.texto("METRÔ", (ex_ - camx, ey_ - camy - 72), self.f_peq, (200, 220, 255), centro=True)
         for s, x, y in self.decalques:
             if vis.collidepoint(x, y):
                 tela.blit(s, (x - camx, y - camy))
@@ -4284,8 +4370,16 @@ class Jogo:
             self.desenhar_fantasma(camx, camy)
         if self.heli is not None:
             self.desenhar_heli(camx, camy)
+        if self.metro is not None:  # debaixo da terra: em volta da estacao e tudo terra (preto)
+            x0_, y0_, w_, h_ = m.metros[self.metro]["sala"]
+            r_ = pygame.Rect(x0_ * T - camx, y0_ * T - camy, w_ * T, h_ * T)
+            preto = (6, 6, 8)
+            tela.fill(preto, (0, 0, W, max(0, r_.y)))
+            tela.fill(preto, (0, r_.bottom, W, max(0, H - r_.bottom)))
+            tela.fill(preto, (0, 0, max(0, r_.x), H))
+            tela.fill(preto, (r_.right, 0, max(0, W - r_.right), H))
         # chuva
-        if self.chuva:
+        if self.chuva and self.metro is None:
             camada = pygame.Surface((W, H), pygame.SRCALPHA)
             if self.estacao() == 2:  # NEVE
                 camada.fill((225, 232, 242, 46))
@@ -4394,6 +4488,8 @@ class Jogo:
         esc = self.escuridao()
         if self.chuva:
             esc = max(esc, 0.18)
+        if self.metro is not None:  # debaixo da terra e sempre meio escuro (so as luzes velhas do teto)
+            esc = 0.5
         if esc <= 0.01:
             # leve tom quente no fim da tarde
             if 16.5 <= self.hora < 18:
@@ -4694,6 +4790,15 @@ class Jogo:
         r = pygame.Rect(W - TAM - 18, 14, TAM + 8, TAM + 8)
         pygame.draw.rect(self.tela, (20, 20, 22), r, border_radius=10)
         pygame.draw.rect(self.tela, (120, 110, 90), r, 2, border_radius=10)
+        if self.metro is not None:  # la embaixo o GPS nao pega
+            mt = m.metros[self.metro]
+            pygame.draw.circle(self.tela, (20, 70, 160), (r.centerx, r.y + 60), 30)
+            pygame.draw.circle(self.tela, (240, 240, 250), (r.centerx, r.y + 60), 30, 3)
+            self.texto("M", (r.centerx, r.y + 42), self.f_grande, (250, 250, 255), centro=True)
+            self.texto("METRÔ", (r.centerx, r.y + 104), self.f_med, (220, 230, 255), centro=True)
+            self.texto(mt["cidade"], (r.centerx, r.y + 132), self.f_peq, (200, 200, 210), centro=True)
+            self.texto("sem sinal de GPS", (r.centerx, r.y + 158), self.f_peq, (150, 150, 160), centro=True)
+            return
         tx = int(p.x // T) - V // 2
         ty = int(p.y // T) - V // 2
         mini = pygame.Surface((V, V))

@@ -1041,3 +1041,133 @@ def criar_sons():
     except Exception:
         return {}
     return sons
+
+
+# ---------------------------------------------------------------- metro
+METRO_W, METRO_H = 48, 17      # tamanho da estacao (em quadradinhos)
+METRO_VAGOES = [(3, 13), (17, 13), (31, 13)]   # (comeco, comprimento) de cada vagao, na linha 1
+METRO_LINHA1 = (6, 9)          # linhas ocupadas pelo trem parado (6, 7, 8)
+METRO_ESCADAS = [7, 40]        # colunas das escadas que sobem para a rua
+METRO_PILARES = [6, 14, 22, 30, 38]   # colunas dos pilares na plataforma de baixo (linha 14)
+
+
+def _vagao(comp, larg, rnd):
+    """Um vagao de metro visto de cima: teto prateado, faixa azul, janelas e portas."""
+    s = pygame.Surface((comp, larg), pygame.SRCALPHA)
+    pygame.draw.rect(s, (40, 42, 48), (0, 0, comp, larg), border_radius=10)
+    pygame.draw.rect(s, (176, 182, 190), (3, 3, comp - 6, larg - 6), border_radius=9)
+    # faixa azul dos dois lados
+    pygame.draw.rect(s, (40, 90, 170), (6, 7, comp - 12, 6))
+    pygame.draw.rect(s, (40, 90, 170), (6, larg - 13, comp - 12, 6))
+    # janelas
+    for x in range(18, comp - 18, 28):
+        pygame.draw.rect(s, (30, 40, 52), (x, 4, 18, 4))
+        pygame.draw.rect(s, (30, 40, 52), (x, larg - 8, 18, 4))
+    # portas (duas por lado)
+    for x in (comp // 4, comp * 3 // 4):
+        for y in (2, larg - 9):
+            pygame.draw.rect(s, (60, 64, 72), (x - 10, y, 20, 7))
+            pygame.draw.line(s, (20, 22, 26), (x, y), (x, y + 6), 1)
+    # aparelhos de ar no teto
+    for x in range(30, comp - 30, 70):
+        pygame.draw.rect(s, (120, 126, 134), (x, larg // 2 - 12, 40, 24), border_radius=4)
+        pygame.draw.rect(s, (80, 84, 92), (x, larg // 2 - 12, 40, 24), 2, border_radius=4)
+        for k in range(4):
+            pygame.draw.line(s, (70, 74, 82), (x + 6 + k * 9, larg // 2 - 8), (x + 6 + k * 9, larg // 2 + 8), 2)
+    # sujeira / ferrugem
+    for _ in range(comp // 40):
+        x = rnd.randint(6, comp - 10)
+        y = rnd.randint(6, larg - 10)
+        pygame.draw.circle(s, (120, 96, 70, 110), (x, y), rnd.randint(2, 5))
+    pygame.draw.rect(s, (20, 20, 24), (0, 0, comp, larg), 2, border_radius=10)
+    return s
+
+
+def sprite_estacao(T, seed=0):
+    """Tudo que fica por cima do chao da estacao: trilhos, faixa amarela, trem parado, escadas, luzes."""
+    rnd = random.Random(seed)
+    w, h = METRO_W * T, METRO_H * T
+    s = pygame.Surface((w, h), pygame.SRCALPHA)
+    # fosso dos trilhos (linhas 5 a 12): brita escura
+    fosso = pygame.Rect(T, 5 * T, w - 2 * T, 8 * T)
+    pygame.draw.rect(s, (46, 44, 42), fosso)
+    for _ in range(1800):
+        x = rnd.randint(fosso.x, fosso.right - 2)
+        y = rnd.randint(fosso.y, fosso.bottom - 2)
+        c = rnd.randint(30, 70)
+        s.fill((c, c - 2, c - 4), (x, y, 2, 2))
+    # dormentes e trilhos das duas linhas
+    for y0 in (5 * T, 9 * T):
+        for x in range(T, w - T, 22):
+            pygame.draw.rect(s, (74, 58, 40), (x, y0 + 18, 10, 4 * T - 36))
+        for yr in (y0 + 38, y0 + 4 * T - 38):
+            pygame.draw.rect(s, (90, 92, 98), (T, yr - 2, w - 2 * T, 5))
+            pygame.draw.rect(s, (170, 174, 182), (T, yr - 1, w - 2 * T, 2))
+    # beira das plataformas: faixa amarela
+    pygame.draw.rect(s, (230, 190, 40), (T, 5 * T - 8, w - 2 * T, 6))
+    pygame.draw.rect(s, (230, 190, 40), (T, 13 * T + 2, w - 2 * T, 6))
+    for x in range(T, w - T, 8):
+        pygame.draw.rect(s, (40, 40, 40), (x, 5 * T - 8, 3, 6))
+        pygame.draw.rect(s, (40, 40, 40), (x, 13 * T + 2, 3, 6))
+    # piso das plataformas: ladrilhos
+    for y0, y1 in ((T, 5 * T - 8), (13 * T + 8, 16 * T)):
+        for x in range(T, w - T, T):
+            pygame.draw.line(s, (0, 0, 0, 40), (x, y0), (x, y1))
+        for y in range(y0, y1, T):
+            pygame.draw.line(s, (0, 0, 0, 40), (T, y), (w - T, y))
+    # pilares
+    for c in METRO_PILARES:
+        r = pygame.Rect(c * T, 14 * T, T, T)
+        pygame.draw.rect(s, (96, 98, 104), r)
+        pygame.draw.rect(s, (60, 62, 66), r, 3)
+    # escadas para a rua (na parede de cima)
+    for c in METRO_ESCADAS:
+        r = pygame.Rect((c - 1) * T, 0, 3 * T, 2 * T + 8)
+        pygame.draw.rect(s, (60, 60, 64), r)
+        for k in range(9):
+            cor = 150 - k * 11
+            pygame.draw.rect(s, (cor, cor, cor + 4), (r.x + 6, r.y + 4 + k * 8, r.w - 12, 6))
+        pygame.draw.rect(s, (200, 200, 60), (r.x + 2, r.y, 4, r.h))
+        pygame.draw.rect(s, (200, 200, 60), (r.right - 6, r.y, 4, r.h))
+        # setinha "saida"
+        pygame.draw.polygon(s, (90, 220, 110), [(r.centerx, r.bottom + 6), (r.centerx - 10, r.bottom + 18),
+                                                (r.centerx + 10, r.bottom + 18)])
+    # luzes do teto (manchas claras)
+    for x in range(3 * T, w - 2 * T, 6 * T):
+        for y in (3 * T, 15 * T):
+            luz = pygame.Surface((90, 40), pygame.SRCALPHA)
+            pygame.draw.ellipse(luz, (255, 250, 210, 34), luz.get_rect())
+            pygame.draw.ellipse(luz, (255, 250, 210, 30), luz.get_rect().inflate(-40, -16))
+            s.blit(luz, (x - 45, y - 20))
+    # o trem parado na linha 1
+    y_tr = int(5.7 * T)
+    larg = int(3.2 * T)
+    for c, comp in METRO_VAGOES:
+        v = _vagao(comp * T, larg, rnd)
+        s.blit(v, (c * T, y_tr))
+    # engates entre os vagoes
+    for (c, comp), (c2, _) in zip(METRO_VAGOES, METRO_VAGOES[1:]):
+        pygame.draw.rect(s, (30, 30, 34), ((c + comp) * T - 4, y_tr + larg // 2 - 5, (c2 - c - comp) * T + 8, 10))
+    return s
+
+
+def sprite_entrada_metro():
+    """Entrada do metro na calcada: buraco com escada descendo, corrimao e a placa com o M."""
+    s = pygame.Surface((84, 110), pygame.SRCALPHA)
+    pygame.draw.rect(s, (40, 40, 44), (6, 20, 72, 86), border_radius=4)
+    for k in range(9):
+        cor = 170 - k * 16
+        pygame.draw.rect(s, (cor, cor, cor + 6), (12, 24 + k * 9, 60, 7))
+    pygame.draw.rect(s, (8, 8, 10), (12, 24 + 9 * 9, 60, 4))
+    # corrimao
+    for x in (6, 74):
+        pygame.draw.rect(s, (120, 124, 132), (x, 18, 4, 88))
+        pygame.draw.rect(s, (190, 196, 204), (x + 1, 18, 2, 88))
+    pygame.draw.rect(s, (120, 124, 132), (6, 16, 72, 4))
+    # placa com o M
+    pygame.draw.rect(s, (60, 60, 66), (40, 0, 4, 18))
+    pygame.draw.circle(s, (20, 70, 160), (42, 10), 10)
+    pygame.draw.circle(s, (240, 240, 250), (42, 10), 10, 2)
+    pts = [(36, 15), (36, 5), (42, 11), (48, 5), (48, 15)]
+    pygame.draw.lines(s, (250, 250, 255), False, pts, 2)
+    return s

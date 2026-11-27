@@ -384,6 +384,7 @@ class Mundo:
         yield "Escondendo mochilas, armas e materiais..."
         self._mochilas_e_materiais()
         self._escadas()
+        self._metro()
 
         yield ("Preparando o desenho...")
         self._indexar()
@@ -756,6 +757,86 @@ class Mundo:
                 if not self.bloqueado(fora[0], fora[1], 12) and self.tile_px(*fora) not in (AGUA, PONTE):
                     b["escada"] = dict(lado=lado, fora=fora, dentro=dentro)
                     break
+
+    def _metro(self):
+        """Estacao de metro: entrada na rua de cada cidade; a estacao (com o trem parado) fica num lugar escondido."""
+        rnd = random.Random(self.seed + 9191)
+        w, h = G.METRO_W, G.METRO_H
+        self.metros = []
+        usados = []
+        for c in self.cidades:
+            if c["tipo"] == "vila":
+                continue
+            # entrada: na rua, perto do centro da cidade
+            ent = None
+            for _ in range(4000):
+                tx = c["x"] + rnd.randint(-c["raio"] // 2, c["raio"] // 2)
+                ty = c["y"] + rnd.randint(-c["raio"] // 2, c["raio"] // 2)
+                x, y = tx * T + 16, ty * T + 16
+                if self.tile(tx, ty) not in (ASFALTO, TERRA, GRAMA) or self.ocup[ty, tx]:
+                    continue
+                if self.bloqueado(x, y, 40) or self.bloqueado(x, y + 70, 16):
+                    continue
+                ent = (x, y)
+                break
+            if ent is None:
+                continue
+            # a estacao: um canto de mata bem longe de tudo
+            sala = None
+            for _ in range(6000):
+                x0 = rnd.randint(10, N - w - 10)
+                y0 = rnd.randint(10, N - h - 10)
+                if any(math.hypot(x0 + w / 2 - o["x"], y0 + h / 2 - o["y"]) < o["raio"] + w for o in self.cidades):
+                    continue
+                if any(abs(x0 - ux) < w + 20 and abs(y0 - uy) < h + 20 for ux, uy in usados):
+                    continue
+                sub = self.tn[y0 - 4:y0 + h + 4, x0 - 4:x0 + w + 4]
+                if not np.all(np.isin(sub, [GRAMA, MATO, AREIA])) or self.ocup[y0 - 4:y0 + h + 4, x0 - 4:x0 + w + 4].any():
+                    continue
+                sala = (x0, y0)
+                break
+            if sala is None:
+                continue
+            x0, y0 = sala
+            usados.append(sala)
+            for ty in range(y0 - 3, y0 + h + 3):
+                for tx in range(x0 - 3, x0 + w + 3):
+                    i = ty * N + tx
+                    for d in (self.arvores, self.pedras, self.arbustos, self.capim_g, self.capim_p):
+                        d.pop(i, None)
+                    self.col.pop(i, None)
+            trem = set()
+            for cc, comp in G.METRO_VAGOES:
+                for tx in range(cc, cc + comp):
+                    for ty in range(*G.METRO_LINHA1):
+                        trem.add((tx, ty))
+            for ty in range(h):
+                for tx in range(w):
+                    borda = tx in (0, w - 1) or ty in (0, h - 1)
+                    solido = borda or (tx, ty) in trem or (ty == 14 and tx in G.METRO_PILARES)
+                    v = PAREDE_CONC if solido else PISO_CONC
+                    self.t[(y0 + ty) * N + x0 + tx] = v
+                    self.tn[y0 + ty, x0 + tx] = v
+            self.ocup[y0 - 1:y0 + h + 1, x0 - 1:x0 + w + 1] = True
+            self.res[y0 - 3:y0 + h + 3, x0 - 3:x0 + w + 3] = True
+            saidas = [((x0 + cc) * T + 16, (y0 + 2) * T + 24) for cc in G.METRO_ESCADAS]
+            idx = len(self.metros)
+            self.metros.append(dict(cidade=c["nome"], ent=ent, sala=(x0, y0, w, h), saidas=saidas, idx=idx))
+            # coisas para revistar: armarios dos funcionarios, caixas, kit de primeiros socorros, banca de jornal
+            for tipo, tx, ty, tab, n in (("armario", 2, 2, "casa", (2, 4)), ("armario", 3, 2, "casa", (2, 4)),
+                                         ("medico", w - 3, 2, "medico", (2, 3)), ("caixa", 20, 3, "casa", (1, 3)),
+                                         ("caixa", w - 12, 15, "casa", (1, 3)), ("prateleira", 26, 15, "casa", (2, 4)),
+                                         ("militar", 2, 15, "militar", (2, 3))):
+                self.moveis.append(dict(id=len(self.moveis), x=(x0 + tx) * T + 16, y=(y0 + ty) * T + 16, tipo=tipo,
+                                        aberto=False, metro=idx, itens=sortear(rnd, LOOT[tab], rnd.randint(*n))))
+
+    def metro_em(self, x, y):
+        """Indice da estacao onde fica o ponto (x, y), ou None."""
+        for m in getattr(self, "metros", ()):
+            x0, y0, w, h = m["sala"]
+            if x0 * T <= x < (x0 + w) * T and y0 * T <= y < (y0 + h) * T:
+                return m["idx"]
+        return None
 
     def densidade(self, x, y):
         tx = min(N - 1, max(0, int(x // T)))
@@ -1152,6 +1233,9 @@ class Mundo:
             arv[i // N, i % N] = True
         mp[arv] *= 0.68
         mp[self.campo & ~arv] = mp[self.campo & ~arv] * 0.45 + np.array([168, 166, 78], np.float32) * 0.55
+        for mt in getattr(self, "metros", ()):  # a estacao fica debaixo da terra: no mapa aparece so a mata
+            x0, y0, w, h = mt["sala"]
+            mp[y0 - 3:y0 + h + 3, x0 - 3:x0 + w + 3] = mp[y0 - 6, x0 - 6] * 0.85
         self.mapa = pygame.surfarray.make_surface(np.ascontiguousarray(np.clip(mp, 0, 255).astype(np.uint8).transpose(1, 0, 2)))
 
     def assar_chao(self, cx, cy):
