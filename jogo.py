@@ -84,6 +84,21 @@ class Zumbi:
             self.vel = rnd.uniform(150, 175)
             self.r = 11
             self.dano = 7
+        elif tipo == "cuspidor":
+            self.hp = 90
+            self.vel = rnd.uniform(55, 66)
+            self.r = 12
+            self.dano = 8
+        elif tipo == "gritador":
+            self.hp = 70
+            self.vel = rnd.uniform(72, 86)
+            self.r = 11
+            self.dano = 6
+        elif tipo == "bombeiro":
+            self.hp = 260
+            self.vel = rnd.uniform(40, 48)
+            self.r = 14
+            self.dano = 14
         else:
             self.hp = 100
             self.vel = rnd.uniform(52, 74)
@@ -140,7 +155,10 @@ class Jogo:
         self.spr_z = {"normal": [G.sprite_zumbi(r, "normal") for _ in range(16)],
                       "gordo": [G.sprite_zumbi(r, "gordo") for _ in range(6)],
                       "corredor": [G.sprite_zumbi(r, "corredor") for _ in range(6)],
-                      "gigante": [G.sprite_zumbi(r, "gigante") for _ in range(2)]}
+                      "gigante": [G.sprite_zumbi(r, "gigante") for _ in range(2)],
+                      "cuspidor": [G.sprite_zumbi(r, "cuspidor") for _ in range(3)],
+                      "gritador": [G.sprite_zumbi(r, "gritador") for _ in range(3)],
+                      "bombeiro": [G.sprite_zumbi(r, "bombeiro") for _ in range(3)]}
         self.spr_morto = {}
         for tipo, lst in self.spr_z.items():
             self.spr_morto[tipo] = []
@@ -772,6 +790,9 @@ class Jogo:
         self.zumbis = []
         self.particulas = []
         self.rastros = []
+        self.acidos = []     # cuspes de acido voando: [x, y, vx, vy, t]
+        self.pocas = []      # pocas de acido no chao: [x, y, t]
+        self.ondas = []      # grito do gritador: [x, y, t]
         self.decalques = []
         self.msgs = []
         self.construidos = []
@@ -1085,11 +1106,15 @@ class Jogo:
         if item in ARMAS_IDS:
             a = ARMAS[ARMA_IDX[item]]
             if item in self.armas:
-                if not a["melee"]:
+                # voce ja tem essa arma: tira as balas dela, mas a arma FICA no lugar (vazia), se um dia precisar
+                if q > 0 and not a["melee"]:
                     self.inv[a["mun"]] = self.inv.get(a["mun"], 0) + max(3, a["pente"] // 2)
                     if avisar:
-                        self.msg(f"Outra {a['nome']}: tirou a munição dela (+{max(3, a['pente'] // 2)})", (230, 220, 160))
-                return
+                        self.msg(f"Outra {a['nome']}: tirou a munição dela (+{max(3, a['pente'] // 2)}). "
+                                 f"A arma ficou aí, se precisar.", (230, 220, 160))
+                elif q > 0 and avisar:
+                    self.msg(f"Você já tem {a['nome']}: ela ficou aí guardada.", (230, 220, 160))
+                return -1  # -1 = arma vazia que ficou no lugar
             self.armas.append(item)
             self.armas.sort(key=lambda i: ARMA_IDX[i])
             if not a["melee"]:
@@ -2804,6 +2829,10 @@ class Jogo:
                 r = self.dar(item, q)
                 if r:
                     ficou.append([item, r])
+            vazias = [ITENS.get(i_, i_) for i_, q_ in ficou if q_ == -1]
+            if vazias and all(q_ == -1 for _, q_ in mv["itens"]):
+                self.msg("Aqui só tem arma que você já tem (sem bala): " + ", ".join(vazias) + ". Ficou guardada.",
+                         (200, 195, 180))
             if mv["itens"]:
                 self.som("pegar", 0.6)
             mv["itens"] = ficou
@@ -2889,8 +2918,9 @@ class Jogo:
         p = self.p
         for z in list(self.zumbis):
             d = math.hypot(z.x - x, z.y - y)
-            if d < 150:
-                self.ferir_zumbi(z, dano * (1 - d / 190), math.atan2(z.y - y, z.x - x))
+            if d < 150:  # o bombeiro aguenta fogo: quase nao sente a explosao
+                self.ferir_zumbi(z, dano * (1 - d / 190) * (0.3 if z.tipo == "bombeiro" else 1.0),
+                                 math.atan2(z.y - y, z.x - x))
         dp = math.hypot(p.x - x, p.y - y)
         if dp < 90:
             p.vida -= 30 * (1 - dp / 90)
@@ -2908,6 +2938,8 @@ class Jogo:
         self.som("espingarda", 1.0)
 
     def ferir_zumbi(self, z, dano, ang):
+        if z.tipo == "bombeiro":  # roupa grossa de bombeiro: metade do dano
+            dano *= 0.5
         if z.estado != "perseguir" and getattr(z, "viu", 0) <= 0:  # nao te viu: ATAQUE SURPRESA
             dano *= 3
             if len(self.numeros) < 40:
@@ -2934,7 +2966,7 @@ class Jogo:
 
     def equipar_zumbi(self, z):
         """Alguns zumbis nascem com taco/machado na mao, capacete ou colete."""
-        if z.tipo == "gigante":
+        if z.tipo in ("gigante", "cuspidor", "gritador", "bombeiro"):
             return z
         r = random.random()
         if r < 0.10:
@@ -3227,6 +3259,7 @@ class Jogo:
                 self.som("pegar", 0.5)
         # zumbis
         self.atualizar_zumbis(dt)
+        self.atualizar_acido(dt)
         self.atualizar_cachorro(dt)
         self.tremor = max(0.0, self.tremor - 30 * dt)
         # numeros de dano subindo
@@ -3494,6 +3527,8 @@ class Jogo:
             z.t_ataque -= dt
             z.t_pensar -= dt
             self.dano_arame(z, dt)
+            if z.tipo in ("cuspidor", "gritador"):
+                self.especial(z, d, dt)
             if 0.01 < d < p.r + z.r - 2 and not self.dirigindo and not self.telhado_b:
                 ex_ = (p.r + z.r - 2 - d) * 0.5  # se mesmo assim entrou, empurra para fora
                 nx_, ny_ = z.x - dx / d * ex_, z.y - dy / d * ex_
@@ -3554,7 +3589,13 @@ class Jogo:
                     vel *= self.no_arame(z, dt)
                     if z.estado == "perseguir" and d < p.r + z.r + 2:
                         vel = 0  # ja encostou em voce: nao entra dentro do seu corpo
-                    self.passo_zumbi(z, math.atan2(ay, ax), vel * dt)
+                    ang_ = math.atan2(ay, ax)
+                    if z.tipo == "cuspidor" and 130 < d < 360 and m.linha_livre(z.x, z.y, p.x, p.y):
+                        vel = 0  # fica de longe cuspindo
+                        z.ang = ang_
+                    elif z.tipo == "gritador" and z.estado == "perseguir" and d < 170:
+                        ang_ += math.pi  # foge de voce
+                    self.passo_zumbi(z, ang_, vel * dt)
             elif not z.parado:
                 rapido = 0.55 if getattr(z, "na_rua", False) and na_cidade else 0.3
                 self.passo_zumbi(z, z.ang, z.vel * rapido * dt * self.no_arame(z, dt), vagando=True)
@@ -3615,11 +3656,82 @@ class Jogo:
                             b.x += ux
                             b.y += uy
 
+    def especial(self, z, d, dt):
+        """Cuspidor cospe acido de longe; gritador grita e chama a horda."""
+        p = self.p
+        z.t_esp = getattr(z, "t_esp", random.uniform(1.0, 2.0)) - dt
+        if z.estado not in ("perseguir", "investigar") or self.dirigindo and z.tipo == "cuspidor":
+            return
+        if z.tipo == "cuspidor" and 90 < d < 420 and z.t_esp <= 0 and self.mundo.linha_livre(z.x, z.y, p.x, p.y):
+            z.t_esp = random.uniform(2.2, 3.0)
+            ang = math.atan2(p.y - z.y, p.x - z.x) + random.uniform(-0.06, 0.06)
+            self.acidos.append([z.x + math.cos(ang) * 16, z.y + math.sin(ang) * 16, math.cos(ang) * 330, math.sin(ang) * 330, 0.0])
+            self.som("faca", 0.4)
+            self.aviso_especial("cuspidor", "CUSPIDOR! Ele cospe ÁCIDO de longe. Desvie e não pise na poça verde!")
+        if z.tipo == "gritador" and d < 650 and z.t_esp <= 0:
+            z.t_esp = 14.0
+            self.ondas.append([z.x, z.y, 0.0])
+            self.fazer_barulho(z.x, z.y, 1300)
+            self.tremor = max(self.tremor, 5)
+            self.som("gemido0", 1.0)
+            self.som("gemido2", 1.0)
+            # chama mais zumbis de longe
+            if self.metro is None:
+                for _ in range(3):
+                    for _t in range(10):
+                        a = random.uniform(0, 6.283)
+                        x, y = p.x + math.cos(a) * random.uniform(650, 850), p.y + math.sin(a) * random.uniform(650, 850)
+                        if not self.mundo.bloqueado(x, y, 14) and self.mundo.tile_px(x, y) not in SOLIDO:
+                            nz = Zumbi(x, y, "normal", random.randrange(len(self.spr_z["normal"])), random)
+                            nz.estado = "perseguir"
+                            nz.alvo = (p.x, p.y)
+                            self.zumbis.append(self.equipar_zumbi(nz))
+                            break
+            self.aviso_especial("gritador", "GRITADOR! O grito dele chama a horda. Mate ele primeiro!", sempre=True)
+
+    def aviso_especial(self, tipo, txt, sempre=False):
+        vistos = self.__dict__.setdefault("vistos_especiais", set())
+        if tipo not in vistos or sempre:
+            vistos.add(tipo)
+            self.msg(txt, (190, 255, 120) if tipo == "cuspidor" else (255, 150, 150))
+
+    def atualizar_acido(self, dt):
+        p = self.p
+        m = self.mundo
+        for a in list(self.acidos):
+            a[0] += a[2] * dt
+            a[1] += a[3] * dt
+            a[4] += dt
+            bateu = (a[0] - p.x) ** 2 + (a[1] - p.y) ** 2 < 18 ** 2 and not self.telhado_b and not self.dirigindo \
+                and self.esquiva <= 0 and not self.__dict__.get("embarcou")
+            if bateu or a[4] > 1.3 or m.bloqueado(a[0], a[1], 3):
+                self.acidos.remove(a)
+                self.pocas.append([a[0], a[1], 6.0])
+                if bateu:
+                    p.vida -= 9 * DIFICULDADES.get(self.dificuldade, {}).get("dano", 1.0)
+                    self.dano_t = 0.45
+                    self.som("dor", 0.6)
+                    self.msg("O ÁCIDO te queimou!", (190, 255, 120))
+                for _ in range(8):
+                    an = random.uniform(0, 6.283)
+                    self.particula(a[0], a[1], math.cos(an) * 90, math.sin(an) * 90, 0.4, (170, 240, 70), 3)
+        for po in list(self.pocas):
+            po[2] -= dt
+            if po[2] <= 0:
+                self.pocas.remove(po)
+            elif (po[0] - p.x) ** 2 + (po[1] - p.y) ** 2 < 26 ** 2 and not self.telhado_b and not self.dirigindo:
+                p.vida -= 7 * dt
+                self.dano_t = max(self.dano_t, 0.2)
+        for o in list(self.ondas):
+            o[2] += dt
+            if o[2] > 1.2:
+                self.ondas.remove(o)
+
     def dano_arame(self, z, dt):
         """Espinhos/arame: machucam o zumbi todo quadro, parado ou andando."""
         for c in self.arames:
             if (c["x"] - z.x) ** 2 + (c["y"] - z.y) ** 2 < 34 * 34:
-                z.hp -= (50 if c["tipo"] == "espinhos" else 18) * dt
+                z.hp -= (50 if c["tipo"] == "espinhos" else 18) * dt * (0.5 if z.tipo == "bombeiro" else 1.0)
                 z.flash = 0.05
                 if random.random() < dt * 3:
                     self.particula(z.x, z.y, random.uniform(-30, 30), random.uniform(-30, 30), 0.4, (120, 20, 16), 3)
@@ -3762,6 +3874,14 @@ class Jogo:
                 tipo = "gordo"
             else:
                 tipo = "normal"
+            if tipo != "gigante":  # zumbis especiais
+                r2 = random.random()
+                if r2 < 0.045:
+                    tipo = "cuspidor"
+                elif r2 < 0.075:
+                    tipo = "gritador"
+                elif r2 < 0.11:
+                    tipo = "bombeiro"
             z = self.equipar_zumbi(Zumbi(x, y, tipo, random.randrange(len(self.spr_z[tipo])), random))
             if self.resgate is not None:
                 z.estado = "perseguir"
@@ -4265,6 +4385,22 @@ class Jogo:
                 self.texto("AU AU!", (sx, sy - 30), self.f_med, (255, 230, 120), centro=True)
             elif not cao["amigo"] and math.hypot(cao["x"] - p.x, cao["y"] - p.y) < 400:
                 self.texto("?", (sx, sy - 28), self.f_med, (200, 230, 255), centro=True)
+        # acido do cuspidor e grito do gritador
+        for po in self.pocas:
+            if vis.collidepoint(po[0], po[1]):
+                al = int(150 * min(1.0, po[2] / 1.5))
+                sp = pygame.Surface((60, 40), pygame.SRCALPHA)
+                pygame.draw.ellipse(sp, (120, 220, 40, al), (0, 0, 60, 40))
+                pygame.draw.ellipse(sp, (200, 255, 110, al), (14, 8, 26, 16))
+                tela.blit(sp, (po[0] - camx - 30, po[1] - camy - 20))
+        for a in self.acidos:
+            pygame.draw.circle(tela, (90, 150, 20), (int(a[0] - camx), int(a[1] - camy)), 7)
+            pygame.draw.circle(tela, (200, 255, 90), (int(a[0] - camx), int(a[1] - camy)), 5)
+            pygame.draw.line(tela, (150, 220, 60), (a[0] - camx, a[1] - camy),
+                             (a[0] - a[2] * 0.04 - camx, a[1] - a[3] * 0.04 - camy), 3)
+        for o in self.ondas:
+            r_ = int(30 + o[2] * 420)
+            pygame.draw.circle(tela, (255, 90, 90), (int(o[0] - camx), int(o[1] - camy)), r_, max(1, int(6 * (1.2 - o[2]))))
         # zumbis e jogador
         for z in self.zumbis:
             if vis.collidepoint(z.x, z.y):

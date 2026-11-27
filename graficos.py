@@ -343,6 +343,31 @@ def sprite_zumbi(rnd, tipo):
         return pygame.transform.smoothscale(base, (122, 122))
     if tipo == "gordo":
         return _boneco(tom(roupa, 10), pele, cabelo, zumbi=True, rnd=rnd, ombro=17)
+    if tipo == "cuspidor":  # pele verde, cheio de bolhas de acido
+        pele = (rnd.randint(100, 120), rnd.randint(160, 185), rnd.randint(60, 80))
+        s = _boneco((50, 70, 40), pele, (40, 60, 30), zumbi=True, rnd=rnd, ombro=13)
+        for _ in range(9):
+            x, y = rnd.randint(26, 46), rnd.randint(24, 48)
+            pygame.draw.circle(s, (170, 240, 70), (x, y), rnd.randint(2, 4))
+            pygame.draw.circle(s, (90, 140, 30), (x, y), rnd.randint(2, 4), 1)
+        pygame.draw.circle(s, (200, 255, 90), (42, 36), 5)  # boca cheia de acido
+        return s
+    if tipo == "gritador":  # branco palido, magro, boca vermelha bem aberta
+        pele = (rnd.randint(205, 225), rnd.randint(200, 215), rnd.randint(190, 205))
+        s = _boneco((70, 70, 80), pele, (20, 20, 20), zumbi=True, rnd=rnd, ombro=11)
+        pygame.draw.ellipse(s, (120, 0, 10), (39, 31, 9, 10))
+        pygame.draw.ellipse(s, (30, 0, 0), (41, 33, 5, 6))
+        return s
+    if tipo == "bombeiro":  # roupa grossa de bombeiro com faixas e capacete
+        s = _boneco((150, 110, 40), pele, cabelo, zumbi=True, rnd=rnd, ombro=15)
+        c = 36
+        for lado in (-1, 1):
+            pygame.draw.line(s, (230, 230, 120), (c - 10, c + lado * 10), (c + 6, c + lado * 10), 3)
+        pygame.draw.circle(s, (40, 30, 10), (c, c), 12)
+        pygame.draw.circle(s, (210, 40, 30), (c, c), 10)
+        pygame.draw.circle(s, (250, 210, 60), (c + 3, c), 4)
+        pygame.draw.line(s, (120, 20, 16), (c - 13, c), (c - 9, c), 4)  # aba de tras do capacete
+        return s
     if tipo == "corredor":
         pele = (rnd.randint(140, 160), rnd.randint(120, 136), rnd.randint(110, 122))
         return _boneco(roupa, pele, cabelo, zumbi=True, rnd=rnd, ombro=11)
