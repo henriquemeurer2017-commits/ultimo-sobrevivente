@@ -101,6 +101,9 @@ class Zumbi:
         self.viu = 0.0
         self.flash = 0.0
         self.balanco = rnd.uniform(0, 6.28)
+        self.mao = None        # "taco" ou "machado" na mao
+        self.capacete = False
+        self.colete = False
 
 
 class Jogo:
@@ -1556,7 +1559,7 @@ class Jogo:
                 a = random.uniform(0, 6.283)
                 x, y = p.x + math.cos(a) * 420, p.y + math.sin(a) * 420
                 t = tipo or random.choice(["normal", "normal", "gordo", "corredor"])
-                self.zumbis.append(Zumbi(x, y, t, random.randrange(len(self.spr_z[t])), random))
+                self.zumbis.append(self.equipar_zumbi(Zumbi(x, y, t, random.randrange(len(self.spr_z[t])), random)))
             self.msg("Lá vem eles!", (255, 150, 130))
         elif cmd == "caixa" and num and 1 <= num <= len(self.mundo.bunkers):
             b = self.mundo.bunkers[num - 1]
@@ -2789,6 +2792,25 @@ class Jogo:
         if z.hp <= 0:
             self.matar(z, ang)
 
+    def equipar_zumbi(self, z):
+        """Alguns zumbis nascem com taco/machado na mao, capacete ou colete."""
+        if z.tipo == "gigante":
+            return z
+        r = random.random()
+        if r < 0.10:
+            z.mao = "taco"
+            z.dano += 5
+        elif r < 0.16:
+            z.mao = "machado"
+            z.dano += 9
+        if random.random() < 0.08:
+            z.capacete = True
+            z.hp += 45
+        if random.random() < 0.06:
+            z.colete = True
+            z.hp += 60
+        return z
+
     def matar(self, z, ang):
         if z not in self.zumbis:
             return
@@ -2805,6 +2827,13 @@ class Jogo:
         s = random.choice(self.spr_sangue)
         self.decalque(s, z.x - s.get_width() / 2, z.y - s.get_height() / 2)
         self.decalque(corpo, z.x - corpo.get_width() / 2, z.y - corpo.get_height() / 2)
+        # o que ele tinha na mao ou vestido pode cair no chao
+        for item, chance in ((z.mao, 0.6), ("capacete" if z.capacete else None, 0.5),
+                             ("colete" if z.colete else None, 0.5)):
+            if item and random.random() < chance:
+                self.drop_id += 1
+                self.mundo.add_item_chao(dict(id=self.drop_id, x=z.x + random.uniform(-18, 18),
+                                              y=z.y + random.uniform(-18, 18), item=item, q=1))
         if random.random() < 0.12:
             item, q = sortear(random, LOOT_ZUMBI, 1)[0]
             self.drop_id += 1
@@ -2823,7 +2852,7 @@ class Jogo:
                     break
                 ang = math.atan2(z.y - p.y, z.x - p.x)
                 dif = abs((ang - p.ang + math.pi) % (2 * math.pi) - math.pi)
-                if dif < 0.95 or (d < p.r + z.r + 8 and dif < 1.7):  # colado de lado tambem leva
+                if dif < 0.95 or (d < p.r + z.r + 8 and dif < 1.7) or d < p.r + z.r + 2:  # colado tambem leva
                     self.ferir_zumbi(z, a["dano"] * random.uniform(0.85, 1.15), ang)
                     self.som("golpe", 0.6)
                     acertos += 1
@@ -2869,8 +2898,8 @@ class Jogo:
                 rx = z.x - p.x
                 ry = z.y - p.y
                 tt = rx * dx + ry * dy
-                colado = (rx * rx + ry * ry < (p.r + z.r + 16) ** 2 and
-                          abs((math.atan2(ry, rx) - p.ang + math.pi) % (2 * math.pi) - math.pi) < 1.2)
+                colado = rx * rx + ry * ry < (p.r + z.r + 2) ** 2 or (rx * rx + ry * ry < (p.r + z.r + 16) ** 2 and
+                          abs((math.atan2(ry, rx) - p.ang + math.pi) % (2 * math.pi) - math.pi) < 1.6)
                 if colado:  # zumbi grudado na sua frente: o tiro pega sempre
                     alvos.append((max(1.0, tt), z))
                 elif -z.r < tt < fim:
@@ -3326,6 +3355,11 @@ class Jogo:
             z.t_ataque -= dt
             z.t_pensar -= dt
             self.dano_arame(z, dt)
+            if 0.01 < d < p.r + z.r - 2 and not self.dirigindo and not self.telhado_b:
+                ex_ = (p.r + z.r - 2 - d) * 0.5  # se mesmo assim entrou, empurra para fora
+                nx_, ny_ = z.x - dx / d * ex_, z.y - dy / d * ex_
+                if not self.mundo.bloqueado(nx_, ny_, z.r):
+                    z.x, z.y = nx_, ny_
             # zona segura: afasta
             fugir = None
             for zx, zy, zr in zonas:
@@ -3379,6 +3413,8 @@ class Jogo:
                 else:
                     vel = z.vel if z.estado == "perseguir" else z.vel * 0.8
                     vel *= self.no_arame(z, dt)
+                    if z.estado == "perseguir" and d < p.r + z.r + 2:
+                        vel = 0  # ja encostou em voce: nao entra dentro do seu corpo
                     self.passo_zumbi(z, math.atan2(ay, ax), vel * dt)
             elif not z.parado:
                 rapido = 0.55 if getattr(z, "na_rua", False) and na_cidade else 0.3
@@ -3449,6 +3485,36 @@ class Jogo:
                 if random.random() < dt * 3:
                     self.particula(z.x, z.y, random.uniform(-30, 30), random.uniform(-30, 30), 0.4, (120, 20, 16), 3)
                 return
+
+    def desenhar_equip_zumbi(self, tela, z, sx, sy, a):
+        ca, sa = math.cos(a), math.sin(a)
+        if z.colete:  # colete: placa larga nos ombros (de lado a lado do corpo)
+            w_, h_ = z.r - 1, 6
+            pts = [(sx + ca * dx_ - sa * dy_, sy + sa * dx_ + ca * dy_)
+                   for dx_, dy_ in ((-h_, -w_), (h_ - 2, -w_), (h_ - 2, w_), (-h_, w_))]
+            pygame.draw.polygon(tela, (64, 72, 50), pts)
+            pygame.draw.polygon(tela, (28, 32, 22), pts, 2)
+            pygame.draw.line(tela, (120, 110, 70), pts[0], pts[3], 2)
+        if z.mao:  # na mao direita, apontando para frente
+            hx = sx + ca * (z.r - 2) - sa * (z.r - 1)
+            hy = sy + sa * (z.r - 2) + ca * (z.r - 1)
+            ex, ey = hx + ca * 22, hy + sa * 22
+            if z.mao == "taco":
+                pygame.draw.line(tela, (110, 70, 36), (hx, hy), (ex, ey), 5)
+                for k in (0.65, 0.85):  # pregos
+                    px, py = hx + ca * 22 * k, hy + sa * 22 * k
+                    pygame.draw.line(tela, (200, 200, 210), (px - sa * 4, py + ca * 4), (px + sa * 4, py - ca * 4), 1)
+            else:
+                pygame.draw.line(tela, (96, 62, 32), (hx, hy), (ex, ey), 4)
+                lam = [(ex - sa * 1, ey + ca * 1), (ex + sa * 9 - ca * 3, ey - ca * 9 - sa * 3),
+                       (ex + sa * 9 - ca * 11, ey - ca * 9 - sa * 11), (ex - ca * 8, ey - sa * 8)]
+                pygame.draw.polygon(tela, (160, 166, 176), lam)
+                pygame.draw.polygon(tela, (60, 62, 70), lam, 1)
+        if z.capacete:  # capacete na cabeca
+            hx_, hy_ = int(sx + ca * 2), int(sy + sa * 2)
+            pygame.draw.circle(tela, (40, 48, 30), (hx_, hy_), max(6, z.r - 4))
+            pygame.draw.circle(tela, (92, 108, 70), (hx_, hy_), max(4, z.r - 6))
+            pygame.draw.circle(tela, (130, 146, 104), (hx_ - 2, hy_ - 2), 2)
 
     def no_arame(self, z, dt):
         """Arame farpado/espinhos: deixam o zumbi lento."""
@@ -3525,7 +3591,7 @@ class Jogo:
                 tipo = "gordo"
             else:
                 tipo = "normal"
-            z = Zumbi(x, y, tipo, random.randrange(len(self.spr_z[tipo])), random)
+            z = self.equipar_zumbi(Zumbi(x, y, tipo, random.randrange(len(self.spr_z[tipo])), random))
             if self.resgate is not None:
                 z.estado = "perseguir"
                 z.alvo = (p.x, p.y)
@@ -4001,6 +4067,8 @@ class Jogo:
                     spr = spr.copy()
                     spr.fill((120, 120, 120, 0), special_flags=pygame.BLEND_RGBA_ADD)
                 tela.blit(spr, (sx - spr.get_width() / 2, sy - spr.get_height() / 2))
+                if z.colete or z.capacete or z.mao:
+                    self.desenhar_equip_zumbi(tela, z, sx, sy, math.radians(ang))
                 if z.viu > 0 and z.estado != "perseguir":
                     self.texto("?", (sx, sy - 30), self.f_med, (255, 220, 90), centro=True)
                 if z.tipo == "gigante":  # barra de vida do gigante
@@ -4458,9 +4526,23 @@ class Jogo:
             g = self.dirigindo.get("gas", 0)
             self.texto(f"CARRO  ·  gasolina {int(g)}%  ·  {int(abs(self.vel_carro) / 4)} km/h  ·  E sai",
                        (W // 2, 120), self.f_med, (255, 120, 100) if g < 10 else (255, 230, 160), centro=True)
-        prot = [(t, v) for t, v in (("Colete", self.colete), ("Capacete", self.capacete), ("Calça", self.calca)) if v > 0]
-        if prot:
-            self.texto("  ·  ".join(f"{t} {int(v)}%" for t, v in prot), (100, 96), self.f_peq, (170, 220, 255))
+        for k_, (it_, v_) in enumerate((("capacete", self.capacete), ("colete", self.colete), ("calca", self.calca))):
+            cx_, cy_ = 38 + k_ * 50, 140
+            pygame.draw.circle(tela, (16, 18, 22), (cx_, cy_), 21)
+            pygame.draw.circle(tela, (60, 62, 68), (cx_, cy_), 21, 3)
+            if v_ > 0:
+                cor_ = (110, 220, 120) if v_ > 50 else (240, 200, 70) if v_ > 20 else (240, 90, 70)
+                pygame.draw.arc(tela, cor_, (cx_ - 21, cy_ - 21, 42, 42), math.pi / 2,
+                                math.pi / 2 + 2 * math.pi * min(100, v_) / 100, 4)
+                G.desenha_icone(tela, it_, cx_, cy_, 0.62)
+            else:
+                ic_ = self.__dict__.setdefault("icones_apagados", {})
+                if it_ not in ic_:
+                    sf_ = pygame.Surface((60, 60), pygame.SRCALPHA)
+                    G.desenha_icone(sf_, it_, 30, 30, 0.62)
+                    sf_.set_alpha(60)
+                    ic_[it_] = sf_
+                tela.blit(ic_[it_], (cx_ - 30, cy_ - 30))
         self.texto(f"zumbis: {self.mortes}", (380, 24), self.f_peq, (200, 170, 160))
         self.painel(pygame.Rect(W - 207, 238, 194, 34))
         pygame.draw.circle(tela, (120, 90, 20), (W - 186, 255), 10)
