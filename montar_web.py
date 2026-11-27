@@ -25,6 +25,11 @@ pagina = os.path.join(WEB, "build", "web", "index.html")
 if os.path.exists(pagina):
     with open(pagina, encoding="utf-8") as f:
         html = f.read()
+    # cada versao nova tem um "carimbo" no nome do arquivo do jogo: o navegador nao usa a versao velha guardada
+    import time as _t
+    carimbo = str(int(_t.time()))
+    for arq_ in ("versao_web.apk", "versao_web.tar.gz"):
+        html = html.replace(f'platform.fopen("{arq_}"', f'platform.fopen("{arq_}?v={carimbo}"')
     html = html.replace("ume_block : 1,", "ume_block : 0,")
     # o jogo comecava com metade do tamanho (gui_divider 2) e as vezes ficava pequeno e achatado
     html = html.replace("gui_divider : 2,", "gui_divider : 1,")
