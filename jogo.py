@@ -2205,6 +2205,24 @@ class Jogo:
                 break
         self.cao = dict(x=x, y=y, amigo=False, ang=0.0, t_mordida=0.0, t_latido=0.0, au=0.0, t_aviso=0.0, passo=0.0)
 
+    def reviver_thor(self, txt):
+        """Se o Thor tinha morrido, ele volta vivo (com vida, fome e sede cheias) do seu lado."""
+        cao = self.cao
+        if not cao or not cao.get("amigo") or not cao.get("morto"):
+            return False
+        p = self.p
+        x, y = p.x + 40, p.y + 30
+        for k in range(12):
+            a = k / 12 * 6.283
+            if not self.mundo.bloqueado(p.x + math.cos(a) * 45, p.y + math.sin(a) * 45, 12):
+                x, y = p.x + math.cos(a) * 45, p.y + math.sin(a) * 45
+                break
+        cao.update(morto=False, vida=100.0, fome=100.0, sede=100.0, sentado=False, modo="quieto", recuar=0,
+                   x=x, y=y, au=1.2)
+        self.msg(txt, (255, 220, 140))
+        self.som("pegar", 0.8)
+        return True
+
     def cuidado_cao(self):
         """O que o Thor precisa agora e com o que da para dar: ("curar"/"comida"/"agua", item) ou None."""
         cao = self.cao
@@ -3137,6 +3155,7 @@ class Jogo:
             self.hora = 9.0  # o resgate acontece de dia: da para ver os zumbis chegando
             self.chuva = False
             self.msg("RÁDIO: \"Recebido! Helicóptero a caminho. Aguente firme!\"", (255, 230, 120))
+            self.reviver_thor("O THOR OUVIU O RÁDIO E VOLTOU! Ele está vivo e veio correndo te ajudar!")
             self.msg("O dia clareou. Alguns zumbis ouviram o rádio... aguente!", (255, 200, 140))
             self.fazer_barulho(p.x, p.y, 1200)
 
@@ -4329,8 +4348,12 @@ class Jogo:
                     dificuldade=self.dificuldade, dono=self.dono, mochila_infinita=self.mochila_infinita,
                     moedas=self.moedas, nome=self.__dict__.get("nome_mundo", "Meu mundo"), mortes=self.mortes)
         cao = self.cao
-        tinha_thor = bool(cao and cao.get("amigo") and not cao.get("morto"))
-        thor = dict(vida=cao.get("vida", 100), fome=cao.get("fome", 100), sede=cao.get("sede", 100)) if tinha_thor else None
+        tinha_thor = bool(cao and cao.get("amigo"))
+        if tinha_thor and cao.get("morto"):  # o Thor tinha morrido: no capitulo 2 ele volta vivo
+            thor = dict(vida=100.0, fome=100.0, sede=100.0, morto=False)
+            self.thor_voltou = True
+        else:
+            thor = dict(vida=cao.get("vida", 100), fome=cao.get("fome", 100), sede=cao.get("sede", 100)) if tinha_thor else None
         semente = (self.mundo.seed * 7 + 13) % (10 ** 9) if self.mundo else None
 
         def passos():
@@ -4445,7 +4468,10 @@ class Jogo:
             self.cao.update(x=sx + 36, y=sy + 20, sentado=False)
         self.msg("O HELICÓPTERO CAIU! Você saiu dos destroços machucado...", (255, 170, 120))
         if self.queda_thor:
-            self.msg("O Thor saiu junto! Ele está do seu lado, abanando o rabo.", (255, 220, 140))
+            if self.__dict__.pop("thor_voltou", False):
+                self.msg("O THOR ESTÁ VIVO! A luz roxa trouxe ele de volta!", (255, 220, 140))
+            else:
+                self.msg("O Thor saiu junto! Ele está do seu lado, abanando o rabo.", (255, 220, 140))
         self.msg("Esse lugar é estranho... o céu é ROXO e os zumbis são MAIS FORTES.", (230, 200, 255))
         self.msg("Ache as 5 peças do rádio de novo e chame o resgate. Zerando: +18 MOEDAS!", (255, 220, 110))
 
