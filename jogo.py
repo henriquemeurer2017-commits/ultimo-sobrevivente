@@ -2109,10 +2109,20 @@ class Jogo:
         elif cao.get("sentado"):
             pass  # sentadinho, esperando voce voltar
         elif cao.get("recuar", 0) > 0:
-            cao["recuar"] -= dt
-            d = math.hypot(p.x - cao["x"], p.y - cao["y"])
-            if d > 40:
-                alvo_x, alvo_y, vel = p.x, p.y, 320.0
+            # RECUANDO: fica escondido atras de voce, do lado contrario dos zumbis, ate voce mandar atacar (X)
+            perto = [z for z in self.zumbis if (z.x - p.x) ** 2 + (z.y - p.y) ** 2 < 600 ** 2]
+            if perto:
+                zx = sum(z.x for z in perto) / len(perto)
+                zy = sum(z.y for z in perto) / len(perto)
+                dz = math.hypot(p.x - zx, p.y - zy) or 1
+                bx, by = p.x + (p.x - zx) / dz * 45, p.y + (p.y - zy) / dz * 45
+                cao["recuar"] = 1.0
+            else:
+                bx, by = p.x, p.y
+                cao["recuar"] = cao.get("recuar", 1.0) - dt * 0.12  # sem zumbi perto por uns segundos: volta ao normal
+            d = math.hypot(bx - cao["x"], by - cao["y"])
+            if d > 12:
+                alvo_x, alvo_y, vel = bx, by, 330.0
         else:
             d = math.hypot(p.x - cao["x"], p.y - cao["y"])
             ult = cao.get("ult_p", (p.x, p.y))
@@ -2366,14 +2376,15 @@ class Jogo:
         if pygame.K_x in tc and self.cao and self.cao["amigo"]:
             ataque = self.cao.get("modo") != "ataque"
             self.cao["modo"] = "ataque" if ataque else "quieto"
+            self.cao["recuar"] = 0
             self.cao["au"] = 0.8 if ataque else 0.0
             self.msg("THOR, ATACA! Ele vai morder os zumbis perto de você. (X de novo: quieto)" if ataque else
                      "Thor quieto: ele só te segue, sem latir. (X: ataca)", (255, 220, 140))
         if pygame.K_z in tc and self.cao and self.cao["amigo"] and not self.cao.get("morto"):
             self.cao["modo"] = "quieto"
-            self.cao["recuar"] = 4.0
+            self.cao["recuar"] = 1.0
             self.cao["au"] = 0.0
-            self.msg("THOR, RECUA! Ele parou de atacar e voltou para perto de você.", (255, 220, 140))
+            self.msg("THOR, RECUA! Ele fica escondido atrás de você até você apertar X.", (255, 220, 140))
         if pygame.K_t in tc:
             self.deitado = not self.__dict__.get("deitado", False)
             if self.deitado:
@@ -4243,6 +4254,8 @@ class Jogo:
                 tela.blit(spr, (sx - spr.get_width() / 2, sy - spr.get_height() / 2))
                 if cao.get("sentado") and cao["amigo"]:
                     self.texto("sentado", (sx, sy + 16), self.f_peq, (255, 230, 160), centro=True)
+                elif cao.get("recuar", 0) > 0 and cao["amigo"]:
+                    self.texto("recuando", (sx, sy + 16), self.f_peq, (180, 220, 255), centro=True)
                 if cao["amigo"] and (cao.get("vida", 100) < 100 or cao.get("fome", 100) < 50 or cao.get("sede", 100) < 50):
                     for k_, (v_, cor_) in enumerate(((cao.get("vida", 100), (220, 60, 60)), (cao.get("fome", 100), (230, 160, 60)),
                                                     (cao.get("sede", 100), (80, 150, 230)))):
