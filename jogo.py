@@ -994,6 +994,8 @@ class Jogo:
         self.calca = d.get("calca", 0.0)
         self.dificuldade = d.get("dificuldade", "medio")
         self.capitulo = d.get("capitulo", 1)
+        if self.capitulo == 2:
+            self.fechar_portas_metro()
         self.miras = d.get("miras", [])
         self.reforco_mochila = d.get("reforco_mochila", 0)
         self.dono = d.get("dono", False)  # o modo dono vale so neste mundo
@@ -4125,6 +4127,7 @@ class Jogo:
                     setattr(self, k, v)
             self.inv.pop("peca", None)
             self.capitulo = 2
+            self.fechar_portas_metro()
             self.cache_chao.clear()
             self.cache_copa.clear()
             self.telhados = {}
@@ -4665,6 +4668,8 @@ class Jogo:
             tela.blit(self.spr_torre, ((m.torre["x"] + 4.5) * T - camx - 75, (m.torre["y"] + 4.5) * T - camy - 75))
         if self.metro is None:
             self.desenhar_elevados(camx, camy, vis)
+            if self.capitulo == 2:  # na dimensao sombria a estacao fica escondida embaixo da mata
+                self.cobrir_estacoes(camx, camy, vis)
         # jogador debaixo de arvore/capim: contorno
         if m.no_capim(p.x, p.y) or self.debaixo_arvore():
             pygame.draw.circle(tela, (255, 255, 255), (int(psx), int(psy)), 15, 1)
@@ -4724,6 +4729,44 @@ class Jogo:
         else:
             return None
         return ini, ini + comp_trem
+
+    def fechar_portas_metro(self):
+        """Capitulo 2: a estacao fica escondida, entao as portas do mato ficam fechadas (so entra pela escada)."""
+        m = self.mundo
+        for mt in getattr(m, "metros", ()):
+            for tx, ty in mt.get("portas", ()):
+                m.t[ty * N + tx] = PAREDE_CONC
+                m.tn[ty, tx] = PAREDE_CONC
+
+    def cobrir_estacoes(self, camx, camy, vis):
+        """A estacao de metro fica EMBAIXO da terra: vista de fora, o lugar dela e so mata fechada."""
+        m = self.mundo
+        cache = self.__dict__.setdefault("capa_metro", {})
+        for mt in getattr(m, "metros", ()):
+            x0, y0, w, h = mt["sala"]
+            ret = pygame.Rect((x0 - 3) * T, (y0 - 3) * T, (w + 6) * T, (h + 6) * T)
+            if not vis.colliderect(ret):
+                continue
+            chave = (mt["idx"], self.estacao(), self.capitulo)
+            if chave not in cache:
+                if len(cache) > 6:
+                    cache.clear()
+                r = random.Random(m.seed + mt["idx"] * 77)
+                capa = pygame.Surface(ret.size, pygame.SRCALPHA)
+                capa.fill((30, 58, 28, 255), (2 * T, 2 * T, ret.w - 4 * T, ret.h - 4 * T))  # chao escuro so no meio
+                for _ in range(ret.w * ret.h // 900):
+                    c_ = r.randint(-8, 10)
+                    pygame.draw.circle(capa, (34 + c_, 64 + c_, 30 + c_),
+                                       (r.randint(2 * T, ret.w - 2 * T), r.randint(2 * T, ret.h - 2 * T)), r.randint(6, 18))
+                copas = m.spr_folhosa + m.spr_pinheiro
+                for yy in range(T, ret.h - T, 34):
+                    for xx in range(T, ret.w - T, 34):
+                        sp = r.choice(copas)
+                        capa.blit(sp, (xx + r.randint(-12, 12) - sp.get_width() // 2 + 17,
+                                       yy + r.randint(-12, 12) - sp.get_height() // 2 + 17))
+                cache[chave] = self.tingir(capa, copa=True)
+            tela = self.tela
+            tela.blit(cache[chave], (ret.x - camx, ret.y - camy))
 
     def desenhar_elevados(self, camx, camy, vis):
         tela = self.tela

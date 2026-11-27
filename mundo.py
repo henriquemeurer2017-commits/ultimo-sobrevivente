@@ -825,6 +825,11 @@ class Mundo:
                     v = PAREDE_CONC if solido else PISO_CONC
                     self.t[(y0 + ty) * N + x0 + tx] = v
                     self.tn[y0 + ty, x0 + tx] = v
+            # portas na parede: quem acha a estacao no meio do mato consegue entrar
+            portas = [(x0, y0 + 2), (x0, y0 + 3), (x0 + w - 1, y0 + 14), (x0 + w - 1, y0 + 15)]
+            for tx, ty in portas:
+                self.t[ty * N + tx] = PISO_CONC
+                self.tn[ty, tx] = PISO_CONC
             self.ocup[y0 - 1:y0 + h + 1, x0 - 1:x0 + w + 1] = True
             self.res[y0 - 3:y0 + h + 3, x0 - 3:x0 + w + 3] = True
             # o que ja estava jogado nesse pedaco de mata vai para a plataforma (nada fica preso dentro do trem)
@@ -836,7 +841,8 @@ class Mundo:
             idx = len(self.metros)
             n_ = sum(1 for o in self.metros if o.get("base") == c["nome"]) + 1
             nome_est = c["nome"] if n_ == 1 else f"{c['nome']} {['', '', 'Norte', 'Sul', 'Leste'][min(n_, 4)]}"
-            self.metros.append(dict(cidade=nome_est, base=c["nome"], ent=ent, sala=(x0, y0, w, h), saidas=saidas, idx=idx))
+            self.metros.append(dict(cidade=nome_est, base=c["nome"], ent=ent, sala=(x0, y0, w, h), saidas=saidas, idx=idx,
+                                    portas=portas))
             # maquinas de lanche e de bebida na plataforma
             for tx in (12, 34):
                 self.moveis.append(dict(id=len(self.moveis), x=(x0 + tx) * T + 16, y=(y0 + 1) * T + 18, tipo="maquina",
