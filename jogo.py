@@ -122,6 +122,14 @@ class Zumbi:
 
 
 class Jogo:
+    toque = False      # jogando no celular/tablet (liga sozinho no primeiro toque na tela)
+    # botoes da tela de toque: (tecla, texto, x, y)
+    BOTOES_TOQUE = [
+        ("e", "Pegar", 1220, 318), ("r", "Recarr.", 1220, 384), ("roda", "Arma", 1220, 450), ("espaco", "Pular", 1220, 516),
+        ("h", "Curar", 1152, 351), ("f", "Comer", 1152, 417), ("g", "Beber", 1152, 483),
+        ("v", "Mochila", 560, 40), ("m", "Mapa", 626, 40), ("x", "Thor", 692, 40), ("z", "Recua", 758, 40),
+        ("l", "Luz", 824, 40), ("b", "Constr.", 890, 40), ("esc", "Pausa", 956, 40),
+    ]
     capitulo = 1       # 1 = o mundo normal; 2 = a DIMENSAO SOMBRIA (depois de zerar o 1)
     no_elevado = None  # linha do trem elevado onde voce esta (la em cima)
     no_trem = None     # dentro do trem elevado: distancia ate a frente do trem
@@ -293,6 +301,9 @@ class Jogo:
         if piloto and self.mundo is not None:
             piloto.quadro(dt)
         getattr(self, "tela_" + self.estado)(dt)
+        if self.toque and self.estado in ("mochila", "mapa", "bau", "bancada"):  # celular: botao para fechar
+            if self.botao_peq("Fechar", pygame.Rect(W - 150, H - 64, 130, 48), (90, 40, 34)):
+                self.estado = "jogo"
         if piloto and self.mundo is not None and self.estado == "jogo":
             piloto.desenhar(self.tela, self.f_med, self.f_peq)
         pygame.display.flip()
@@ -335,6 +346,38 @@ class Jogo:
                     self.click_dir = True
             elif e.type == pygame.MOUSEWHEEL:
                 self.roda = e.y
+            elif e.type in (pygame.FINGERDOWN, pygame.FINGERMOTION, pygame.FINGERUP):
+                self.toque_evento(e)
+
+    def toque_evento(self, e):
+        """Celular: dedo do lado esquerdo = joystick; do lado direito = mira e atira; botoes redondos = teclas."""
+        self.toque = True
+        dedos = self.__dict__.setdefault("dedos", {})
+        x, y = e.x * W, e.y * H
+        fid = (getattr(e, "touch_id", 0), e.finger_id)
+        if e.type == pygame.FINGERUP:
+            dedos.pop(fid, None)
+            return
+        if e.type == pygame.FINGERMOTION:
+            if fid in dedos:
+                dedos[fid]["x"], dedos[fid]["y"] = x, y
+            return
+        if self.estado != "jogo":  # nos menus o toque funciona como clique do mouse
+            return
+        for tecla, _txt, bx, by in self.BOTOES_TOQUE:
+            if (x - bx) ** 2 + (y - by) ** 2 < 32 ** 2:
+                dedos[fid] = dict(papel="botao", x=x, y=y)
+                if tecla == "roda":
+                    self.roda = -1
+                else:
+                    k = {"espaco": pygame.K_SPACE, "esc": pygame.K_ESCAPE}.get(tecla) or getattr(pygame, "K_" + tecla)
+                    self.teclas.add(k)
+                return
+        if x < W * 0.42 and y > H * 0.28:
+            dedos[fid] = dict(papel="joy", x0=x, y0=y, x=x, y=y)
+        else:
+            dedos[fid] = dict(papel="mira", x=x, y=y)
+            self.click = True  # tocar no mundo tambem serve de clique (ex.: colocar construcao)
 
     def sair(self):
         if self.mundo is not None and self.estado in ("jogo", "pausa", "mapa", "construir"):
@@ -2371,6 +2414,8 @@ class Jogo:
             return f["mv"], f["corre"], f["mira"], f["tiro"], f["mouse"]
         if self.console_ativo:
             return (0, 0), False, False, False, pygame.mouse.get_pos()
+        if self.toque:
+            return self.entrada_toque()
         k = pygame.key.get_pressed()
         mx = (k[pygame.K_d] or k[pygame.K_RIGHT]) - (k[pygame.K_a] or k[pygame.K_LEFT])
         my = (k[pygame.K_s] or k[pygame.K_DOWN]) - (k[pygame.K_w] or k[pygame.K_UP])
@@ -2378,6 +2423,64 @@ class Jogo:
         pos = pygame.mouse.get_pos()
         tiro = b[0] and not self.mouse_no_hud(pos)
         return (mx, my), (k[pygame.K_LSHIFT] or k[pygame.K_RSHIFT]), b[2], tiro, pos
+
+    def entrada_toque(self):
+        dedos = self.__dict__.setdefault("dedos", {})
+        mv, corre, tiro = (0.0, 0.0), False, False
+        R = 70
+        joy = next((d for d in dedos.values() if d["papel"] == "joy"), None)
+        if joy:
+            dx, dy = joy["x"] - joy["x0"], joy["y"] - joy["y0"]
+            d = math.hypot(dx, dy)
+            if d > R:  # o joystick acompanha o dedo
+                joy["x0"] += dx / d * (d - R)
+                joy["y0"] += dy / d * (d - R)
+                d = R
+            if d > 12:
+                mv = (dx / math.hypot(dx, dy), dy / math.hypot(dx, dy))
+                corre = d >= R * 0.95
+        mira = next((d for d in dedos.values() if d["papel"] == "mira"), None)
+        if mira:
+            pos = (mira["x"], mira["y"])
+            tiro = True
+            self.mouse_toque = pos
+        elif mv != (0.0, 0.0):  # sem mirar: olha para onde esta andando
+            pos = (W / 2 + mv[0] * 160, H / 2 + mv[1] * 160)
+            self.mouse_toque = pos
+        else:
+            pos = self.__dict__.get("mouse_toque", (W / 2 + 160, H / 2))
+        return mv, corre, False, tiro, pos
+
+    def desenhar_toque(self):
+        """Joystick e botoes redondos (so no celular)."""
+        tela = self.tela
+        cam = self.__dict__.setdefault("camada_toque", pygame.Surface((W, H), pygame.SRCALPHA))
+        cam.fill((0, 0, 0, 0))
+        dedos = self.__dict__.get("dedos", {})
+        joy = next((d for d in dedos.values() if d["papel"] == "joy"), None)
+        cx, cy = (joy["x0"], joy["y0"]) if joy else (170, 470)
+        pygame.draw.circle(cam, (255, 255, 255, 40), (int(cx), int(cy)), 70)
+        pygame.draw.circle(cam, (255, 255, 255, 110), (int(cx), int(cy)), 70, 3)
+        kx, ky = (joy["x"], joy["y"]) if joy else (cx, cy)
+        if joy and math.hypot(kx - cx, ky - cy) > 70:
+            a = math.atan2(ky - cy, kx - cx)
+            kx, ky = cx + math.cos(a) * 70, cy + math.sin(a) * 70
+        pygame.draw.circle(cam, (255, 255, 255, 150), (int(kx), int(ky)), 30)
+        if not joy:
+            self.texto("andar", (cx, cy + 82), self.f_peq, (230, 230, 230), centro=True)
+        for tecla, txt, bx, by in self.BOTOES_TOQUE:
+            apertado = any((d["x"] - bx) ** 2 + (d["y"] - by) ** 2 < 32 ** 2 and d["papel"] == "botao" for d in dedos.values())
+            pygame.draw.circle(cam, (255, 220, 140, 150) if apertado else (20, 22, 28, 150), (bx, by), 29)
+            pygame.draw.circle(cam, (255, 230, 170, 200), (bx, by), 29, 2)
+        tela.blit(cam, (0, 0))
+        for tecla, txt, bx, by in self.BOTOES_TOQUE:
+            self.texto(txt, (bx, by - 9), self.f_peq, (255, 245, 225), centro=True)
+        mira = next((d for d in dedos.values() if d["papel"] == "mira"), None)
+        if mira:
+            pygame.draw.circle(tela, (255, 80, 60), (int(mira["x"]), int(mira["y"])), 16, 2)
+            pygame.draw.circle(tela, (255, 80, 60), (int(mira["x"]), int(mira["y"])), 3)
+        elif not joy:
+            self.texto("toque aqui para mirar e atirar", (W * 0.72, H * 0.62), self.f_peq, (230, 230, 230), centro=True)
 
     def tela_jogo(self, dt):
         self.teclas_jogo()
@@ -3326,7 +3429,7 @@ class Jogo:
             if self.click:
                 self.colocar_construcao(wx, wy)
         elif tiro and self.cd <= 0 and not self.acao:
-            pode = a["melee"] or a.get("auto") or self.click or self.fake is not None
+            pode = a["melee"] or a.get("auto") or self.click or self.fake is not None or self.toque  # celular: segura e atira
             if pode:
                 self.atirar(mira, movendo)
         # acao
@@ -4719,6 +4822,8 @@ class Jogo:
         if self.luneta:
             self.desenhar_luneta()
         self.desenhar_hud()
+        if self.toque and self.estado == "jogo" and self.fake is None:
+            self.desenhar_toque()
 
     def pos_trem(self, el):
         """Onde esta o trem desta linha agora: (comeco, fim) ao longo da linha, ou None se esta parado longe."""

@@ -183,6 +183,19 @@ document.getElementById("ts-voltar").onclick = function () { location.reload(); 
 </body>"""
     if 'id="telasair"' not in html:
         html = html.replace("</body>", sair, 1)
+    # celular em pe: pede para deitar o celular (o jogo e largo)
+    girar = """
+<div id="girar"><div style="font-size:64px">📱↻</div><div>Vire o celular <b>deitado</b> para jogar</div>
+<div style="font-size:16px;opacity:.75;margin-top:10px">Esquerda: joystick para andar · Direita: toque para mirar e atirar</div></div>
+<style>
+#girar { display: none; position: fixed; inset: 0; z-index: 999999999; background: #000; color: #fff;
+  flex-direction: column; align-items: center; justify-content: center; text-align: center;
+  font: 24px sans-serif; padding: 24px; }
+@media (orientation: portrait) and (pointer: coarse) { #girar { display: flex; } }
+</style>
+</body>"""
+    if 'id="girar"' not in html:
+        html = html.replace("</body>", girar, 1)
     with open(pagina, "w", encoding="utf-8") as f:
         f.write(html)
     print("pagina ajustada: tela cheia e sem clique para comecar")
