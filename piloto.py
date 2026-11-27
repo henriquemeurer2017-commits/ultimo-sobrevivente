@@ -233,6 +233,8 @@ class Piloto:
             pass  # revistando / consertando: fica parado
         elif self.espera > 0:
             self.espera -= dt
+        elif j.dirigindo and self.tarefas and self.tarefas[0][0] != "carro":
+            j.interagir()  # entrou no carro sem querer: sai
         elif self.tarefas:
             mv, corre = self.fazer_tarefa(dt)
         j.fake = dict(mv=mv, corre=corre, mira=mira, tiro=tiro, mouse=self.mouse)
@@ -409,8 +411,9 @@ class Piloto:
                 tent[id(obj)] = tent.get(id(obj), 0) + 1
                 if al and al[1] is obj:
                     j.interagir()
-                else:  # outro movel mais perto: revista ele tambem
-                    j.interagir()
+                elif not j.acao:  # tem outra coisa mais perto (um carro, por exemplo): revista a caixa direto
+                    j.acao = dict(tipo="movel", obj=obj, t=0.0, total=2.0 if obj["tipo"] == "militar" else 1.3,
+                                  txt="Revistando...")
                 self.espera = 0.3
                 return (0.0, 0.0), False
             return self.ir_para(alvo, dt), True
