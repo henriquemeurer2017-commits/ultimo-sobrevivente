@@ -14,6 +14,11 @@ from config import *
 PRIORIDADE_ARMAS = ["fuzil", "smg", "espingarda", "revolver", "pistola", "besta", "rifle"]
 
 
+def revistado(mv):
+    """Ja revistou: aberto, ou so sobrou arma repetida (vazia) la dentro."""
+    return mv["aberto"] or (mv.get("itens") and all(q <= 0 for _, q in mv["itens"]))
+
+
 class Piloto:
     def __init__(self, jogo):
         self.j = jogo
@@ -164,7 +169,7 @@ class Piloto:
         if j.cao and not j.cao["amigo"]:
             tf.append(("cao", None, "Fazendo carinho no Thor"))
         for mv in m.moveis[j.n_moveis_base:]:  # a mochila que caiu quando morreu
-            if mv["tipo"] == "mochila" and not mv["aberto"]:
+            if mv["tipo"] == "mochila" and not revistado(mv):
                 tf.append(("revistar", mv, "Buscando a mochila que caiu quando morri"))
         if not self.metro_feito and getattr(m, "metros", None):
             p = j.p
@@ -177,7 +182,7 @@ class Piloto:
             if j.inv.get("peca", 0) >= PECAS_RADIO or tem_radio:  # ja tem as pecas: direto para a torre
                 break
             caixa = next((mv for mv in m.moveis if mv.get("predio") is b and "revela" in mv), None)
-            if caixa and caixa["aberto"]:  # bunker que ja foi revistado: nao volta nele
+            if caixa and revistado(caixa):  # bunker que ja foi revistado: nao volta nele
                 continue
             if caixa:
                 tf.append(("revistar", caixa, f"Indo pela estrada pegar a peça do bunker {i + 1}"))
@@ -394,7 +399,7 @@ class Piloto:
             return self.ir_para(alvo, dt), False
         if tipo == "revistar":
             tent = self.__dict__.setdefault("tentativas", {})
-            if obj["aberto"] or tent.get(id(obj), 0) >= 2:  # aberto, ou mochila cheia: segue em frente
+            if revistado(obj) or tent.get(id(obj), 0) >= 2:  # aberto, ou mochila cheia: segue em frente
                 self.tarefas.pop(0)
                 self.caminho = []
                 return (0.0, 0.0), False
@@ -426,7 +431,7 @@ class Piloto:
             self.tarefas.pop(0)
             sobra = j.capacidade() - j.espaco_usado()
             novas = [] if sobra < 60 else [("revistar", mv, f"Revistando a estação de metrô {obj['cidade']}")
-                     for mv in sorted((mv for mv in j.mundo.moveis if mv.get("metro") == obj["idx"] and not mv["aberto"]),
+                     for mv in sorted((mv for mv in j.mundo.moveis if mv.get("metro") == obj["idx"] and not revistado(mv)),
                                       key=lambda mv: mv["x"])]
             novas.append(("sair_metro", obj, "Atravessando a estação até a outra escada" if novas else
                           "Mochila pequena: só atravessando a estação até a outra escada"))

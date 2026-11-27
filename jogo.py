@@ -122,6 +122,8 @@ class Zumbi:
 
 
 class Jogo:
+    no_elevado = None  # linha do trem elevado onde voce esta (la em cima)
+    no_trem = None     # dentro do trem elevado: distancia ate a frente do trem
     def __init__(self):
         try:
             pygame.mixer.pre_init(22050, -16, 2, 512)
@@ -2574,6 +2576,19 @@ class Jogo:
             if e and math.hypot(e["dentro"][0] - p.x, e["dentro"][1] - p.y) < 50:
                 return ("descer", self.telhado_b)
             return None
+        if self.no_elevado is not None:
+            if self.no_trem is not None:
+                return ("pular_trem", None)
+            el = m.elevados[self.no_elevado]
+            for px_, py_ in el["pilares"]:
+                if math.hypot(px_ - p.x, py_ - p.y) < 48:
+                    return ("descer_elevado", (px_, py_))
+            return None
+        if not self.__dict__.get("piloto") and self.metro is None:
+            for i_, el in enumerate(getattr(m, "elevados", ())):
+                for px_, py_ in el["pilares"]:
+                    if abs(px_ - p.x) < 60 and abs(py_ - p.y) < 60 and math.hypot(px_ - p.x, py_ - p.y) < 52:
+                        return ("subir_elevado", (i_, px_, py_))
         if self.metro is not None:
             mt = m.metros[self.metro]
             for sx_, sy_ in mt["saidas"]:
@@ -2678,6 +2693,12 @@ class Jogo:
             return f"[E] Entrar no carro (gasolina {int(obj.get('gas', 0))}%)"
         if tipo == "sair_carro":
             return "[E] Sair do carro"
+        if tipo == "subir_elevado":
+            return "[E] Subir a escada da torre (trilho do trem elevado)"
+        if tipo == "descer_elevado":
+            return "[E] Descer a escada da torre"
+        if tipo == "pular_trem":
+            return "[E] Pular do trem (fica em cima do trilho)"
         if tipo == "descer_metro":
             return f"[E] Descer a escada do metrô (estação {obj['cidade']})"
         if tipo == "subir_metro":
@@ -2741,6 +2762,36 @@ class Jogo:
             return
         if tipo == "sair_carro":
             self.sair_carro()
+            return
+        if tipo == "subir_elevado":
+            i_, px_, py_ = obj
+            el = self.mundo.elevados[i_]
+            self.no_elevado = i_
+            self.no_trem = None
+            self.p.x, self.p.y = (px_, el["fixo"]) if el["dir"] == "h" else (el["fixo"], py_)
+            self.agachado = False
+            self.__dict__["deitado"] = False
+            self.som("clique", 0.5)
+            self.msg("Você subiu no TRILHO do trem elevado! Zumbi não alcança aqui. Quando o trem passar, você PULA NELE.",
+                     (255, 220, 140))
+            return
+        if tipo == "descer_elevado":
+            px_, py_ = obj
+            self.no_elevado = None
+            self.no_trem = None
+            for k_ in range(12):
+                a_ = k_ / 12 * 6.283
+                x_, y_ = px_ + math.cos(a_) * 44, py_ + math.sin(a_) * 44
+                if not self.mundo.bloqueado(x_, y_, self.p.r):
+                    break
+            self.p.x, self.p.y = x_, y_
+            self.som("clique", 0.5)
+            self.msg("Você desceu da torre.", (220, 230, 200))
+            return
+        if tipo == "pular_trem":
+            self.no_trem = None
+            self.som("golpe", 0.5)
+            self.msg("Você pulou do trem! Está em cima do trilho.", (255, 220, 140))
             return
         if tipo in ("descer_metro", "subir_metro"):
             if tipo == "descer_metro":
@@ -3115,6 +3166,8 @@ class Jogo:
         p = self.p
         m = self.mundo
         self.atualizar_metro()
+        if self.no_elevado is not None:
+            self.andar_de_trem(dt)
         self.atualizar_trens(dt)
         mv, corre, mira, tiro, mouse = self.entrada()
         if self.__dict__.get("embarcou"):  # pendurado na corda do helicoptero
@@ -3135,7 +3188,7 @@ class Jogo:
         # esquiva rapida (ESPACO)
         self.t_esquiva -= dt
         if pygame.K_SPACE in self.teclas and self.t_esquiva <= 0 and p.folego >= 20 and self.esquiva <= 0 \
-                and not self.telhado_b:
+                and not self.telhado_b and self.no_elevado is None:
             if movendo:
                 n = math.hypot(mx, my)
                 self.dir_esquiva = (mx / n, my / n)
@@ -3180,7 +3233,15 @@ class Jogo:
             n = math.hypot(mx, my)
             dx = mx / n * vel * dt
             dy = my / n * vel * dt
-            if self.telhado_b:  # no telhado: anda livre em cima dele, sem cair pela borda
+            if self.no_elevado is not None:  # em cima do trilho do trem: anda so ao longo da linha
+                el = self.mundo.elevados[self.no_elevado]
+                if el["dir"] == "h":
+                    p.x = clamp(p.x + dx, el["a"] + 16, el["b"] - 16)
+                    p.y = el["fixo"] + clamp(p.y + dy - el["fixo"], -16, 16)
+                else:
+                    p.y = clamp(p.y + dy, el["a"] + 16, el["b"] - 16)
+                    p.x = el["fixo"] + clamp(p.x + dx - el["fixo"], -16, 16)
+            elif self.telhado_b:  # no telhado: anda livre em cima dele, sem cair pela borda
                 b = self.telhado_b
                 p.x = clamp(p.x + dx, b["x"] * T + 14, (b["x"] + b["w"]) * T - 14)
                 p.y = clamp(p.y + dy, b["y"] * T + 14, (b["y"] + b["h"]) * T - 14)
@@ -3601,7 +3662,7 @@ class Jogo:
                 self.passo_zumbi(z, z.ang, z.vel * rapido * dt * self.no_arame(z, dt), vagando=True)
             # ataque
             if d < z.r + p.r + 8 and z.t_ataque <= 0 and not seguro and self.esquiva <= 0 and not self.telhado_b \
-                    and not self.dirigindo and not self.__dict__.get("embarcou"):
+                    and not self.dirigindo and not self.__dict__.get("embarcou") and self.no_elevado is None:
                 z.t_ataque = {"gordo": 1.4, "corredor": 0.7, "gigante": 1.7}.get(z.tipo, 1.0)
                 dano_z = z.dano * DIFICULDADES.get(self.dificuldade, {}).get("dano", 1.0)
                 if self.calca > 0:  # a calca reforcada segura um pouco
@@ -4452,6 +4513,7 @@ class Jogo:
         elif not self.__dict__.get("embarcou"):
             tela.blit(spr, (psx - spr.get_width() / 2, psy - spr.get_height() / 2))
         spr_jog = spr
+        self.spr_jog_atual = spr
         for c in self.construidos:
             if c["tipo"] == "barricada" and vis.collidepoint(c["x"], c["y"]):
                 spr = self.rot(("bar",), self.spr_barricada, c["ang"] - 90, 3)
@@ -4615,6 +4677,11 @@ class Jogo:
                     pygame.draw.circle(tela, (70, 66, 60), (int(px - camx + 6), int(py - camy + 8)), 22)
                     pygame.draw.circle(tela, (120, 116, 106), (int(px - camx), int(py - camy)), 20)
             tela.blit(viga, (ret.x - camx, ret.y - camy))
+            for px, py in el["pilares"]:  # escadinha para subir na torre
+                if vis.collidepoint(px, py):
+                    spr_e = self.spr_escada if not h_ else self.rot(("escada",), self.spr_escada, 90, 90)
+                    ox, oy = (0, 34) if h_ else (34, 0)
+                    tela.blit(spr_e, (px + ox - camx - spr_e.get_width() / 2, py + oy - camy - spr_e.get_height() / 2))
             pt = self.pos_trem(el)
             if pt:
                 ini, fim = pt
@@ -4634,6 +4701,39 @@ class Jogo:
                 tela.set_clip(area)  # o trem some no fim da linha
                 tela.blit(trem, pos)
                 tela.set_clip(None)
+            if self.no_elevado == i:  # voce la em cima (por cima do trilho e do trem)
+                spr_j = self.__dict__.get("spr_jog_atual")
+                if spr_j is not None:
+                    psx_, psy_ = self.p.x - camx, self.p.y - camy
+                    tela.blit(self.spr_sombra, (psx_ - self.spr_sombra.get_width() / 2 + 5, psy_ - self.spr_sombra.get_height() / 2 + 7))
+                    tela.blit(spr_j, (psx_ - spr_j.get_width() / 2, psy_ - spr_j.get_height() / 2))
+
+    def andar_de_trem(self, dt):
+        """Em cima do trilho: quando o trem chega, voce entra nele e vai junto ate o fim da linha."""
+        p = self.p
+        el = self.mundo.elevados[self.no_elevado]
+        h_ = el["dir"] == "h"
+        pos = p.x if h_ else p.y
+        pt = self.pos_trem(el)
+        if self.no_trem is None:
+            if pt and pt[0] + 20 < pos < pt[1] - 20 and self.__dict__.get("t_pulou", 0) <= 0:
+                self.no_trem = pos - pt[0]
+                self.tremor = max(self.tremor, 6)
+                self.som("golpe", 0.6)
+                self.msg("Você ENTROU NO TREM! Ele te leva até o fim da linha. (E pula fora)", (140, 255, 160))
+            self.t_pulou = self.__dict__.get("t_pulou", 0) - dt
+            return
+        if not pt:  # o trem chegou no fim e parou: voce desce dele em cima do trilho
+            self.no_trem = None
+            self.t_pulou = 3.0
+            self.msg("O trem parou no fim da linha. Desça pela escada de uma torre (E).", (255, 220, 140))
+            return
+        novo = clamp(pt[0] + self.no_trem, el["a"] + 16, el["b"] - 16)
+        if h_:
+            p.x, p.y = novo, el["fixo"]
+        else:
+            p.x, p.y = el["fixo"], novo
+        self.tremor = max(self.tremor, 1.2)
 
     def atualizar_trens(self, dt):
         """O trem elevado anda; quando passa perto, a tela treme, faz barulho e chama os zumbis."""
