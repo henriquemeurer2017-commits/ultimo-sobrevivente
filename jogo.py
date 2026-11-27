@@ -3074,6 +3074,8 @@ class Jogo:
         self.atualizar_metro()
         self.atualizar_trens(dt)
         mv, corre, mira, tiro, mouse = self.entrada()
+        if self.__dict__.get("embarcou"):  # pendurado na corda do helicoptero
+            mv, corre, mira, tiro = (0, 0), False, False, False
         if self.dirigindo:
             self.dirigir(dt, mv)
             mv, tiro, mira = (0, 0), False, False
@@ -3202,8 +3204,8 @@ class Jogo:
             self.acao["t"] += dt
             if self.acao["t"] >= self.acao["total"]:
                 self.terminar_acao()
-        # pegar itens no chao
-        for it in m.perto(m.itens_ch, p.x, p.y, 0):
+        # pegar itens no chao (pendurado no helicoptero nao pega nada)
+        for it in (() if self.__dict__.get("embarcou") else m.perto(m.itens_ch, p.x, p.y, 0)):
             if not it.get("pego") and (it["x"] - p.x) ** 2 + (it["y"] - p.y) ** 2 < 24 * 24:
                 r = self.dar(it["item"], it["q"])
                 if r == it["q"]:
@@ -3285,24 +3287,19 @@ class Jogo:
         if self.resgate is not None:
             self.resgate -= dt
             if self.resgate <= 0 and self.heli is None:
-                self.heli = [p.x - 1400, p.y - 500, 0.0]
-                self.msg("O HELICÓPTERO CHEGOU! Fique parado onde está!", (255, 240, 150))
+                self.heli = [p.x - 1500, p.y - 700, 0.0]
+                self.heli_fase = "chegando"
+                self.heli_ang = math.atan2(700, 1500)
+                self.heli_corda = 0.0
+                self.heli_tiro = 0.0
+                self.heli_alt = 1.25
+                self.embarcou = False
+                self.msg("O HELICÓPTERO CHEGOU! O soldado vai te dar cobertura. Fique embaixo da corda!",
+                         (255, 240, 150))
                 self.som("helicoptero", 1.0)
         if self.heli is not None:
-            hx, hy, ht = self.heli
-            dx = p.x - hx
-            dy = p.y - 60 - hy
-            d = math.hypot(dx, dy)
-            if d > 8:
-                self.heli[0] += dx / d * min(d, 360 * dt)
-                self.heli[1] += dy / d * min(d, 360 * dt)
-            else:
-                self.heli[2] += dt
-                if self.heli[2] > 2.5:
-                    self.vencer()
-                    return
-            if random.random() < dt * 2:
-                self.som("helicoptero", 0.7)
+            if self.atualizar_heli(dt):
+                return
         # salvar sozinho
         self.t_auto += dt
         if self.t_auto > 30:
@@ -3552,7 +3549,7 @@ class Jogo:
                 self.passo_zumbi(z, z.ang, z.vel * rapido * dt * self.no_arame(z, dt), vagando=True)
             # ataque
             if d < z.r + p.r + 8 and z.t_ataque <= 0 and not seguro and self.esquiva <= 0 and not self.telhado_b \
-                    and not self.dirigindo:
+                    and not self.dirigindo and not self.__dict__.get("embarcou"):
                 z.t_ataque = {"gordo": 1.4, "corredor": 0.7, "gigante": 1.7}.get(z.tipo, 1.0)
                 dano_z = z.dano * DIFICULDADES.get(self.dificuldade, {}).get("dano", 1.0)
                 if self.calca > 0:  # a calca reforcada segura um pouco
@@ -3849,6 +3846,19 @@ class Jogo:
 
     def tela_vitoria(self, dt):
         self.desenhar_fundo_menu(dt)
+        # o helicoptero indo embora com voce, cruzando a tela
+        base = self.__dict__.get("spr_heli")
+        if base is None:
+            base = self.spr_heli = G.sprite_helicoptero()
+        t = time.time()
+        hx = (t * 160) % (W + 600) - 300
+        hy = 560 + math.sin(t * 1.3) * 10
+        self.tela.blit(base, (hx - base.get_width() / 2, hy - base.get_height() / 2))
+        for k in range(4):
+            a = t * 22 + k * math.pi / 2
+            pygame.draw.line(self.tela, (24, 24, 26), (hx + 9, hy), (hx + 9 + math.cos(a) * 112, hy + math.sin(a) * 112), 5)
+        pygame.draw.line(self.tela, (150, 120, 70), (hx - 6, hy + 10), (hx - 6, hy + 70), 2)
+        pygame.draw.circle(self.tela, (196, 150, 110), (int(hx - 6), int(hy + 74)), 7)
         self.texto("VOCÊ FOI RESGATADO!", (W // 2, 190), self.f_titulo, (120, 230, 140), centro=True)
         self.texto(f"Sobreviveu {self.dia} dias e derrubou {self.mortes} zumbis.", (W // 2, 280), self.f_med2, centro=True)
         self.texto("O helicóptero levou você para a zona segura. Parabéns, sobrevivente.", (W // 2, 320), self.f_med2,
@@ -4290,7 +4300,7 @@ class Jogo:
             sombra = self.spr_sombra_gg
             tela.blit(sombra, (psx - sombra.get_width() / 2 + 6, psy - sombra.get_height() / 2 + 8))
             tela.blit(sc, (psx - sc.get_width() / 2, psy - sc.get_height() / 2))
-        else:
+        elif not self.__dict__.get("embarcou"):
             tela.blit(spr, (psx - spr.get_width() / 2, psy - spr.get_height() / 2))
         spr_jog = spr
         for c in self.construidos:
@@ -4371,8 +4381,6 @@ class Jogo:
         # fantasma da construcao
         if self.modo_construir is not None:
             self.desenhar_fantasma(camx, camy)
-        if self.heli is not None:
-            self.desenhar_heli(camx, camy)
         if self.metro is not None:  # debaixo da terra: em volta da estacao e tudo terra (preto)
             x0_, y0_, w_, h_ = m.metros[self.metro]["sala"]
             r_ = pygame.Rect(x0_ * T - camx, y0_ * T - camy, w_ * T, h_ * T)
@@ -4395,6 +4403,8 @@ class Jogo:
             tela.blit(camada, (0, 0))
         # luz e escuridao
         self.desenhar_luz(camx, camy, psx, psy)
+        if self.heli is not None:  # o helicoptero voa acima de tudo, com as luzes acesas
+            self.desenhar_heli(camx, camy)
         if not NAVEGADOR:  # a sombra das bordas pesa no navegador
             tela.blit(self.vinheta, (0, 0))
         if self.dano_t > 0:
@@ -4564,21 +4574,139 @@ class Jogo:
             cor = (255, 240, 160) if i == self.modo_construir else ((210, 230, 210) if pode else (150, 140, 140))
             self.texto(f"{i + 1}. {r['nome']}: {custo}", (W // 2 - 150, y + 40 + i * 32), self.f_peq, cor)
 
+    def atualizar_heli(self, dt):
+        """Helicoptero: chega voando, para em cima de voce, desce a corda, o soldado atira nos zumbis,
+        voce sobe e ele vai embora. Devolve True quando o jogo acabou."""
+        p = self.p
+        hx, hy, ht = self.heli
+        fase = self.__dict__.get("heli_fase", "chegando")
+        self.heli[2] += dt
+        alvo = (p.x, p.y - 70)
+        dx, dy = alvo[0] - hx, alvo[1] - hy
+        d = math.hypot(dx, dy)
+        if fase == "chegando":
+            vel = min(520.0, 140 + d * 0.9)
+            if d > 6:
+                self.heli[0] += dx / d * min(d, vel * dt)
+                self.heli[1] += dy / d * min(d, vel * dt)
+                quer = math.atan2(dy, dx)
+                dif = (quer - self.heli_ang + math.pi) % (2 * math.pi) - math.pi
+                self.heli_ang += dif * min(1.0, 3 * dt)
+            self.heli_alt = max(1.0, self.heli_alt - 0.25 * dt)
+            if d < 20:
+                self.heli_fase = "parado"
+                self.msg("A CORDA está descendo! Fique embaixo dela.", (255, 240, 150))
+        elif fase == "parado":
+            if d > 2:  # vai acompanhando voce devagar
+                self.heli[0] += dx / d * min(d, 150 * dt)
+                self.heli[1] += dy / d * min(d, 150 * dt)
+            self.heli_alt = max(1.0, self.heli_alt - 0.25 * dt)
+            self.heli_corda = min(1.0, self.heli_corda + dt / 1.6)
+            if self.heli_corda >= 1 and d < 50:
+                self.t_corda = self.__dict__.get("t_corda", 0.0) + dt
+                if self.t_corda > 1.4:
+                    self.heli_fase = "indo"
+                    self.embarcou = True
+                    self.heli[2] = 0.0
+                    self.dirigindo = None
+                    self.acao = None
+                    self.msg("VOCÊ SUBIU NA CORDA! Segura firme...", (140, 255, 160))
+            else:
+                self.t_corda = 0.0
+            # vento das helices levanta poeira
+            if random.random() < dt * 30:
+                a = random.uniform(0, 6.283)
+                gx, gy = hx, hy + 70
+                self.particula(gx + math.cos(a) * 30, gy + math.sin(a) * 30, math.cos(a) * 240, math.sin(a) * 240,
+                               0.6, (180, 170, 140), 3)
+        else:  # indo embora com voce
+            self.heli_corda = max(0.0, self.heli_corda - dt / 1.2)
+            ang = self.heli_ang
+            vel = 60 + self.heli[2] * 260
+            self.heli[0] += math.cos(ang) * vel * dt
+            self.heli[1] += math.sin(ang) * vel * dt
+            self.heli_alt = min(1.6, self.heli_alt + 0.18 * dt)
+            p.x, p.y = self.heli[0], self.heli[1] + 70  # a camera vai junto
+            p.vida = max(p.vida, 1)
+            if self.heli[2] > 4.0:
+                self.embarcou = False
+                self.vencer()
+                return True
+        # o soldado na porta atira nos zumbis perto
+        if fase != "indo" and d < 900:
+            self.heli_tiro = self.__dict__.get("heli_tiro", 0.0) - dt
+            if self.heli_tiro <= 0:
+                perto = [z for z in self.zumbis if (z.x - hx) ** 2 + (z.y - hy - 70) ** 2 < 480 ** 2]
+                if perto:
+                    z = min(perto, key=lambda z: (z.x - p.x) ** 2 + (z.y - p.y) ** 2)
+                    self.heli_tiro = 0.32
+                    ox, oy = hx + math.cos(self.heli_ang + 1.57) * 26, hy + math.sin(self.heli_ang + 1.57) * 26
+                    self.rastros.append([ox, oy, z.x, z.y, 0.08])
+                    self.ferir_zumbi(z, 55, math.atan2(z.y - oy, z.x - ox))
+                    if z.hp <= 0:
+                        self.matar(z, math.atan2(z.y - oy, z.x - ox))
+                    self.som("fuzil", 0.35)
+        if random.random() < dt * 2:
+            self.som("helicoptero", 0.8)
+        self.tremor = max(self.tremor, 1.5 if d < 300 else 0)
+        return False
+
     def desenhar_heli(self, camx, camy):
+        tela = self.tela
         hx, hy, _ = self.heli
         sx = hx - camx
         sy = hy - camy
-        sh = pygame.Surface((160, 90), pygame.SRCALPHA)
-        pygame.draw.ellipse(sh, (0, 0, 0, 90), (0, 0, 160, 90))
-        self.tela.blit(sh, (sx - 60, sy + 80))
-        pygame.draw.ellipse(self.tela, (50, 64, 46), (sx - 50, sy - 22, 100, 44))
-        pygame.draw.rect(self.tela, (50, 64, 46), (sx - 120, sy - 6, 80, 12))
-        pygame.draw.ellipse(self.tela, (120, 170, 200), (sx + 14, sy - 14, 30, 28))
-        a = time.time() * 30
-        for k in range(2):
-            aa = a + k * math.pi / 2
-            pygame.draw.line(self.tela, (30, 30, 30), (sx - math.cos(aa) * 90, sy - math.sin(aa) * 90),
-                             (sx + math.cos(aa) * 90, sy + math.sin(aa) * 90), 4)
+        alt = self.__dict__.get("heli_alt", 1.0)
+        ang = math.degrees(self.__dict__.get("heli_ang", 0.0))
+        base = self.__dict__.get("spr_heli")
+        if base is None:
+            base = self.spr_heli = G.sprite_helicoptero()
+        # sombra no chao (mais longe quanto mais alto)
+        q = int(round(ang / 6)) % 60
+        k_ = round(alt, 1)
+        chave = (q, k_)
+        cache = self.__dict__.setdefault("cache_heli", {})
+        if chave not in cache:
+            if len(cache) > 200:
+                cache.clear()
+            corpo = pygame.transform.rotozoom(base, -q * 6, k_)
+            sombra = corpo.copy()
+            sombra.fill((0, 0, 0, 255), special_flags=pygame.BLEND_RGBA_MIN)
+            sombra.fill((255, 255, 255, 80), special_flags=pygame.BLEND_RGBA_MIN)
+            cache[chave] = (corpo, sombra)
+        corpo, sombra = cache[chave]
+        off = 50 + (alt - 1) * 160
+        tela.blit(sombra, (sx - sombra.get_width() / 2 + off * 0.5, sy - sombra.get_height() / 2 + off + 40))
+        # corda de resgate
+        corda = self.__dict__.get("heli_corda", 0.0)
+        if corda > 0:
+            fim = sy + 70 * corda
+            pygame.draw.line(tela, (150, 120, 70), (sx - 6, sy), (sx - 6, fim), 2)
+            pygame.draw.line(tela, (150, 120, 70), (sx + 6, sy), (sx + 6, fim), 2)
+            for yy in range(int(sy + 10), int(fim), 10):
+                pygame.draw.line(tela, (190, 160, 100), (sx - 6, yy), (sx + 6, yy), 2)
+        tela.blit(corpo, (sx - corpo.get_width() / 2, sy - corpo.get_height() / 2))
+        if self.__dict__.get("embarcou") and corda > 0.2:  # voce pendurado na corda
+            pygame.draw.circle(tela, (40, 30, 24), (int(sx), int(sy + 70 * corda - 6)), 9)
+            pygame.draw.circle(tela, (196, 150, 110), (int(sx), int(sy + 70 * corda - 6)), 6)
+        # helice grande (borrao girando + 4 pas) e a helice da cauda
+        t = time.time()
+        r = int(118 * alt)
+        disco = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+        pygame.draw.circle(disco, (30, 30, 30, 40), (r, r), r)
+        pygame.draw.circle(disco, (30, 30, 30, 60), (r, r), r, 3)
+        tela.blit(disco, (sx - r + math.cos(math.radians(ang)) * 10 * alt, sy - r + math.sin(math.radians(ang)) * 10 * alt))
+        cx_ = sx + math.cos(math.radians(ang)) * 10 * alt
+        cy_ = sy + math.sin(math.radians(ang)) * 10 * alt
+        for k in range(4):
+            a = t * 22 + k * math.pi / 2
+            pygame.draw.line(tela, (24, 24, 26), (cx_, cy_), (cx_ + math.cos(a) * r, cy_ + math.sin(a) * r), 5)
+        pygame.draw.circle(tela, (60, 60, 64), (int(cx_), int(cy_)), 7)
+        tx = sx - math.cos(math.radians(ang)) * 112 * alt
+        ty = sy - math.sin(math.radians(ang)) * 112 * alt
+        a = t * 40
+        pygame.draw.line(tela, (24, 24, 26), (tx - math.cos(a) * 16, ty - math.sin(a) * 16),
+                         (tx + math.cos(a) * 16, ty + math.sin(a) * 16), 3)
 
     def desenhar_luz(self, camx, camy, psx, psy):
         esc = self.escuridao()
@@ -4612,6 +4740,12 @@ class Jogo:
                 if len(self.cone_cache) > 24:
                     self.cone_cache.popitem(last=False)
             self.escuro.blit(cone, (psx - cone.get_width() / 2, psy - cone.get_height() / 2), special_flags=sub)
+        if self.heli is not None:  # holofote do helicoptero
+            sz = 420
+            luz = self.__dict__.get("luz_heli")
+            if luz is None:
+                luz = self.luz_heli = pygame.transform.scale(self.luz_fogo, (sz, sz))
+            self.escuro.blit(luz, (self.heli[0] - camx - sz / 2, self.heli[1] + 70 - camy - sz / 2), special_flags=sub)
         for c in self.construidos:
             if c["tipo"] == "fogueira":
                 fx = c["x"] - camx

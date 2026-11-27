@@ -574,6 +574,12 @@ class Piloto:
             if abs(j.vel_carro) > 25:  # freia antes de descer
                 return (0.0, 1.0), False
             j.interagir()  # sai do carro
+            # o carro ficou estacionado aqui: marca no mapa do piloto para ele nao tentar passar por dentro
+            for ty in range(int((c["y"] - 50) // T), int((c["y"] + 50) // T) + 1):
+                for tx in range(int((c["x"] - 50) // T), int((c["x"] + 50) // T) + 1):
+                    if (tx * T + 16 - c["x"]) ** 2 + (ty * T + 16 - c["y"]) ** 2 < 42 ** 2 and                             (tx, ty) != (int(p.x // T), int(p.y // T)):
+                        self.grade[ty, tx] = False
+                        self.grade_base[ty, tx] = False
             return acabou()
         # direcao: segue o caminho (o mesmo do andar a pe)
         self.ir_para(destino, dt)  # calcula o caminho (o mesmo do andar a pe)

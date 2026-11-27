@@ -1265,3 +1265,44 @@ def sprite_trem_elevado(rnd=None):
         pygame.draw.rect(s, (255, 240, 170), (x, 8, 4, 6))
         pygame.draw.rect(s, (255, 240, 170), (x, larg - 14, 4, 6))
     return s
+
+
+
+def sprite_helicoptero():
+    """Helicoptero militar de resgate visto de cima (bico para a direita), sem as helices."""
+    s = pygame.Surface((250, 110), pygame.SRCALPHA)
+    cy = 55
+    verde, verde_e, verde_c = (62, 78, 54), (36, 46, 32), (92, 112, 80)
+    # esquis
+    for y in (cy - 30, cy + 26):
+        pygame.draw.rect(s, (40, 40, 44), (78, y, 96, 5), border_radius=2)
+        for x in (96, 150):
+            pygame.draw.rect(s, (40, 40, 44), (x, min(y, cy) + (0 if y < cy else -20), 4, 22))
+    # cauda
+    pygame.draw.polygon(s, verde_e, [(84, cy - 9), (10, cy - 4), (10, cy + 4), (84, cy + 9)])
+    pygame.draw.polygon(s, verde, [(84, cy - 7), (12, cy - 2), (12, cy + 2), (84, cy + 7)])
+    pygame.draw.rect(s, verde_e, (4, cy - 16, 16, 32), border_radius=4)   # leme da cauda
+    pygame.draw.rect(s, verde, (6, cy - 14, 12, 28), border_radius=4)
+    # corpo
+    pygame.draw.ellipse(s, verde_e, (66, cy - 30, 150, 60))
+    pygame.draw.ellipse(s, verde, (69, cy - 27, 144, 54))
+    pygame.draw.ellipse(s, verde_c, (90, cy - 18, 90, 20))                 # brilho do teto
+    # portas abertas dos lados (onde o soldado fica)
+    for y in (cy - 27, cy + 19):
+        pygame.draw.rect(s, (22, 26, 22), (110, y, 40, 8))
+    # cabine de vidro
+    pygame.draw.ellipse(s, (30, 40, 50), (176, cy - 20, 40, 40))
+    pygame.draw.ellipse(s, (120, 180, 210), (180, cy - 17, 34, 34))
+    pygame.draw.ellipse(s, (200, 235, 250), (192, cy - 12, 12, 10))
+    # motor e cubo da helice
+    pygame.draw.rect(s, verde_e, (112, cy - 12, 44, 24), border_radius=6)
+    pygame.draw.rect(s, (70, 74, 70), (116, cy - 9, 36, 18), border_radius=5)
+    # faixa de resgate e cruz
+    pygame.draw.rect(s, (220, 200, 60), (96, cy - 27, 6, 54))
+    pygame.draw.rect(s, (240, 240, 240), (158, cy + 6, 14, 14))
+    pygame.draw.rect(s, (200, 30, 30), (163, cy + 8, 4, 10))
+    pygame.draw.rect(s, (200, 30, 30), (160, cy + 11, 10, 4))
+    # luzes
+    pygame.draw.circle(s, (255, 60, 60), (24, cy - 14), 3)
+    pygame.draw.circle(s, (60, 255, 90), (24, cy + 14), 3)
+    return s
