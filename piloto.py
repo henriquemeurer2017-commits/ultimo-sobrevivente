@@ -191,6 +191,7 @@ class Piloto:
     # ------------------------------------------------------------------ cada quadro
     def quadro(self, dt):
         j = self.j
+        self.relogio_luta = self.__dict__.get("relogio_luta", 0.0) + dt
         if j.estado == "morto":
             j.renascer()
             self.caminho = []
@@ -297,9 +298,25 @@ class Piloto:
         j = self.j
         p = j.p
         m = j.mundo
-        perigo = [z for z in j.zumbis if (z.estado == "perseguir" and (z.x - p.x) ** 2 + (z.y - p.y) ** 2 < 450 ** 2)
-                  or (z.x - p.x) ** 2 + (z.y - p.y) ** 2 < 120 ** 2]
+        ign = self.__dict__.setdefault("ignorar", {})
+        agora = self.__dict__.get("relogio_luta", 0.0)
+        perigo = [z for z in j.zumbis if ((z.estado == "perseguir" and (z.x - p.x) ** 2 + (z.y - p.y) ** 2 < 450 ** 2)
+                  or (z.x - p.x) ** 2 + (z.y - p.y) ** 2 < 120 ** 2)
+                  and (ign.get(id(z), -1) < agora or (z.x - p.x) ** 2 + (z.y - p.y) ** 2 < 55 ** 2)]
         if not perigo:
+            self.t_luta_parado = 0.0
+            return None
+        # lutando sem conseguir sair do lugar (zumbi atras de arvore/agua): desiste dele por um tempo
+        if math.hypot(p.x - self.__dict__.get("pos_luta", (0, 0))[0], p.y - self.__dict__.get("pos_luta", (0, 0))[1]) < 1.5                 and not j.fake.get("tiro"):
+            self.t_luta_parado = self.__dict__.get("t_luta_parado", 0.0) + 1 / 60
+        else:
+            self.t_luta_parado = 0.0
+        self.pos_luta = (p.x, p.y)
+        if self.t_luta_parado > 1.5:
+            for q in perigo:
+                if (q.x - p.x) ** 2 + (q.y - p.y) ** 2 >= 55 ** 2:
+                    ign[id(q)] = agora + 10.0
+            self.t_luta_parado = 0.0
             return None
         z = min(perigo, key=lambda z: (z.x - p.x) ** 2 + (z.y - p.y) ** 2)
         d = math.hypot(z.x - p.x, z.y - p.y)
