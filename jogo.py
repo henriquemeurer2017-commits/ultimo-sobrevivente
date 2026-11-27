@@ -122,6 +122,7 @@ class Zumbi:
 
 
 class Jogo:
+    intro_cap2 = None  # tempo da cena da queda do helicoptero no comeco do capitulo 2 (None = sem cena)
     toque = False      # jogando no celular/tablet (liga sozinho no primeiro toque na tela)
     # botoes da tela de toque: (tecla, texto, x, y)
     BOTOES_TOQUE = [
@@ -3387,6 +3388,18 @@ class Jogo:
         if self.no_elevado is not None:
             self.andar_de_trem(dt)
         self.atualizar_trens(dt)
+        if self.intro_cap2 is not None and self.atualizar_queda(dt):
+            for q in self.particulas:  # fumaca e fogo continuam andando
+                q[0] += q[2] * dt
+                q[1] += q[3] * dt
+                q[2] *= 0.9
+                q[3] *= 0.9
+                q[4] -= dt
+            self.particulas = [q for q in self.particulas if q[4] > 0]
+            self.cam[0] += (p.x - self.cam[0]) * min(1, dt * 6)  # a camera acompanha o helicoptero
+            self.cam[1] += (p.y - self.cam[1]) * min(1, dt * 6)
+            self.tremor = max(0.0, self.tremor - 30 * dt)
+            return
         mv, corre, mira, tiro, mouse = self.entrada()
         if self.__dict__.get("embarcou"):  # pendurado na corda do helicoptero
             mv, corre, mira, tiro = (0, 0), False, False, False
@@ -3625,7 +3638,7 @@ class Jogo:
                 self.msg("O HELICÓPTERO CHEGOU! O soldado vai te dar cobertura. Fique embaixo da corda!",
                          (255, 240, 150))
                 self.som("helicoptero", 1.0)
-        if self.heli is not None:
+        if self.heli is not None and self.intro_cap2 is None:
             if self.atualizar_heli(dt):
                 return
         # salvar sozinho
@@ -4292,8 +4305,8 @@ class Jogo:
                    f"{'CAPÍTULO 2' if self.capitulo == 2 else 'capítulo 1'}!  (agora você tem {self.moedas})", (W // 2, 366),
                    self.f_med, (255, 220, 110), centro=True)
         if self.capitulo == 1:
-            self.texto("Uma luz roxa abriu no céu... é um PORTAL para outra dimensão!", (W // 2, 402), self.f_med,
-                       (210, 160, 255), centro=True)
+            self.texto("No caminho, o helicóptero entrou numa LUZ ROXA no céu... e o motor começou a falhar!",
+                       (W // 2, 402), self.f_med, (210, 160, 255), centro=True)
             if self.botao("CAPÍTULO 2: a Dimensão Sombria", W // 2, 450, w=460):
                 self.ir_capitulo2()
                 return
@@ -4336,13 +4349,124 @@ class Jogo:
             if thor:  # o Thor atravessou o portal com voce
                 self.cao.update(amigo=True, x=self.p.x + 40, y=self.p.y + 30, sentado=False, modo="quieto", **thor)
             self.msgs = []
-            self.msg("CAPÍTULO 2: A DIMENSÃO SOMBRIA", (210, 160, 255))
-            self.msg("Vocês atravessaram o portal... o céu é roxo e os zumbis são MAIS FORTES.", (230, 200, 255))
-            if thor:
-                self.msg("O Thor veio junto! Ele está do seu lado.", (255, 220, 140))
-            self.msg("Ache as 5 peças do rádio de novo e chame o resgate. Zerando: +18 MOEDAS!", (255, 220, 110))
+            self.comecar_queda(bool(thor))
             self.salvar()
         self.comecar_carga(passos())
+
+    def comecar_queda(self, thor):
+        """Cena: o helicoptero vem caindo, girando e soltando fumaca, e bate no chao. Voces saem dos destrocos."""
+        p = self.p
+        self.intro_cap2 = 0.0
+        self.queda_thor = thor
+        self.queda_ponto = (p.x, p.y)
+        self.heli = [p.x - 1300, p.y - 900, 0.0]
+        self.heli_fase = "caindo"
+        self.heli_ang = math.atan2(900, 1300)
+        self.heli_alt = 1.6
+        self.heli_corda = 0.0
+        self.embarcou = True       # voce (e o Thor) ainda estao dentro do helicoptero
+        self.thor_junto = thor
+        self.zumbis = []
+        self.hora = 17.5
+        self.cam = [p.x, p.y]
+        self.som("helicoptero", 1.0)
+
+    def atualizar_queda(self, dt):
+        """Roda a cena da queda. Devolve True enquanto o helicoptero ainda nao caiu."""
+        t = self.intro_cap2
+        self.intro_cap2 = t + dt
+        p = self.p
+        px, py = self.queda_ponto
+        if self.heli is not None and self.heli_fase == "caindo":
+            alvo = (px + 90, py - 40)
+            dx, dy = alvo[0] - self.heli[0], alvo[1] - self.heli[1]
+            d = math.hypot(dx, dy)
+            vel = 520.0
+            if d > 10:
+                self.heli[0] += dx / d * min(d, vel * dt)
+                self.heli[1] += dy / d * min(d, vel * dt)
+            self.heli_ang += dt * (3 + t * 2.5)          # girando sem controle
+            self.heli_alt = max(0.9, 1.6 - t * 0.2)
+            self.tremor = max(self.tremor, 2 + t)
+            p.x, p.y = self.heli[0], self.heli[1] + 70   # a camera vai junto
+            if random.random() < dt * 40:  # fumaca preta e fogo no motor
+                self.particula(self.heli[0] + random.uniform(-10, 10), self.heli[1] + random.uniform(-10, 10),
+                               random.uniform(-40, 40), random.uniform(-60, 10), random.uniform(0.6, 1.2),
+                               random.choice([(40, 40, 40), (60, 56, 52), (255, 140, 40)]), random.randint(4, 8))
+            if random.random() < dt * 2:
+                self.som("helicoptero", 0.9)
+            if d <= 10 or t > 4.5:
+                self.bater_helicoptero()
+            return True
+        # depois da batida: titulo do capitulo e fogo nos destrocos
+        if random.random() < dt * 25 and t < 40:
+            wx, wy = self.queda_destrocos
+            self.particula(wx + random.uniform(-30, 30), wy + random.uniform(-14, 14), random.uniform(-10, 10),
+                           random.uniform(-60, -20), random.uniform(0.5, 1.0),
+                           random.choice([(255, 150, 40), (255, 90, 30), (60, 56, 52)]), random.randint(3, 7), "f")
+        if t > 14:
+            self.intro_cap2 = None
+        return False
+
+    def bater_helicoptero(self):
+        p = self.p
+        hx, hy = self.heli[0], self.heli[1] + 60
+        self.queda_destrocos = (hx, hy)
+        # destrocos queimados no chao
+        base = self.__dict__.get("spr_heli") or G.sprite_helicoptero()
+        quebrado = pygame.transform.rotate(base, -math.degrees(self.heli_ang) + 20)
+        quebrado = quebrado.copy()
+        quebrado.fill((70, 60, 56, 255), special_flags=pygame.BLEND_RGBA_MULT)
+        self.decalque(quebrado, hx - quebrado.get_width() / 2, hy - quebrado.get_height() / 2)
+        for _ in range(60):
+            a = random.uniform(0, 6.283)
+            v = random.uniform(80, 380)
+            cor = random.choice([(255, 200, 60), (255, 120, 30), (240, 60, 20), (90, 80, 70)])
+            self.particula(hx, hy, math.cos(a) * v, math.sin(a) * v, random.uniform(0.4, 1.0), cor, random.randint(3, 8), "f")
+        self.flash_t = 0.2
+        self.flash_pos = (hx - self.cam[0] + W / 2, hy - self.cam[1] + H / 2)
+        self.tremor = 22
+        self.som("rpg", 1.0) if "rpg" in self.sons else self.som("espingarda", 1.0)
+        self.heli = None
+        self.heli_fase = None
+        self.embarcou = False
+        # voce e o Thor saem rolando dos destrocos
+        sx, sy = self.queda_ponto
+        for k in range(16):
+            a = k / 16 * 6.283
+            x, y = hx + math.cos(a) * 110, hy + math.sin(a) * 110
+            if not self.mundo.bloqueado(x, y, 14):
+                sx, sy = x, y
+                break
+        p.x, p.y = sx, sy
+        p.vida = max(40, p.vida - 15)
+        self.cam = [p.x, p.y]
+        if self.queda_thor and self.cao:
+            self.cao.update(x=sx + 36, y=sy + 20, sentado=False)
+        self.msg("O HELICÓPTERO CAIU! Você saiu dos destroços machucado...", (255, 170, 120))
+        if self.queda_thor:
+            self.msg("O Thor saiu junto! Ele está do seu lado, abanando o rabo.", (255, 220, 140))
+        self.msg("Esse lugar é estranho... o céu é ROXO e os zumbis são MAIS FORTES.", (230, 200, 255))
+        self.msg("Ache as 5 peças do rádio de novo e chame o resgate. Zerando: +18 MOEDAS!", (255, 220, 110))
+
+    def desenhar_titulo_cap2(self):
+        t = self.intro_cap2
+        if t is None or self.heli is not None:
+            return
+        tq = t - 0  # comeca logo depois da batida
+        dur = 9.0
+        if tq > dur:
+            return
+        a = min(1.0, tq / 1.2) * min(1.0, (dur - tq) / 1.5)
+        img = self.__dict__.get("img_cap2")
+        if img is None:
+            img = self.img_cap2 = self.f_morte.render("CAPÍTULO 2", True, (215, 150, 255))
+            self.img_cap2_s = self.f_morte.render("CAPÍTULO 2", True, (30, 0, 40))
+            self.img_cap2_sub = self.f_grande.render("A DIMENSÃO SOMBRIA", True, (240, 225, 255))
+        for im, (x, y) in ((self.img_cap2_s, (W // 2 + 6, 150 + 7)), (img, (W // 2, 150)), (self.img_cap2_sub, (W // 2, 230))):
+            c = im.copy()
+            c.set_alpha(int(255 * a))
+            self.tela.blit(c, c.get_rect(center=(x, y)))
 
     def tela_pausa(self, dt):
         self.desenhar()
@@ -4918,6 +5042,8 @@ class Jogo:
         self.desenhar_hud()
         if self.toque and self.estado == "jogo" and self.fake is None:
             self.desenhar_toque()
+        if self.intro_cap2 is not None:
+            self.desenhar_titulo_cap2()
 
     def pos_trem(self, el):
         """Onde esta o trem desta linha agora: (comeco, fim) ao longo da linha, ou None se esta parado longe."""
