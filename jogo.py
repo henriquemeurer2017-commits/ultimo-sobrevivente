@@ -1128,7 +1128,6 @@ class Jogo:
         self.calca = d.get("calca", 0.0)
         self.dificuldade = d.get("dificuldade", "medio")
         self.capitulo = d.get("capitulo", 1)
-        self.armas.sort(key=ordem_arma)
         if self.capitulo == 2:
             self.fechar_portas_metro()
         self.miras = d.get("miras", [])
@@ -1137,7 +1136,7 @@ class Jogo:
         self.moedas = d.get("moedas", 0) if self.dono else self.recorde.get("moedas", d.get("moedas", 0))
         self.mochila_infinita = d.get("mochila_infinita", False)
         self.p.sangrando, self.p.perna, self.p.braco = d.get("feridas", [False, False, False])
-        self.armas = d["armas"]
+        self.armas = sorted(d["armas"], key=ordem_arma)
         self.pente = d["pente"]
         self.silen = d["silen"]
         self.arma = d["arma"]
