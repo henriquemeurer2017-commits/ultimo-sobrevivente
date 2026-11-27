@@ -636,9 +636,57 @@ class Jogo:
         self.tela.blit(b, r.move(0, 2))
         self.tela.blit(img, r)
 
+    def nick(self):
+        return (self.recorde.get("nick") or "").strip()
+
+    def tela_nome(self, dt):
+        """Tela de colocar o nome (nickname). Aparece na primeira vez que a pessoa entra no jogo."""
+        self.desenhar_fundo_menu(dt)
+        self.titulo_menu(120)
+        txt = self.__dict__.get("nick_txt")
+        if txt is None:
+            txt = self.nick_txt = self.nick()
+        if pygame.K_BACKSPACE in self.teclas:
+            txt = txt[:-1]
+        elif self.letras and pygame.K_RETURN not in self.teclas:
+            txt = (txt + "".join(c for c in self.letras if c.isprintable()))[:16]
+        self.nick_txt = txt
+        self.texto("COLOQUE SEU NOME", (W // 2, 250), self.f_grande, (255, 220, 140), centro=True)
+        self.texto("Ele vai aparecer em cima do seu personagem e quando você zerar o jogo.", (W // 2, 296),
+                   self.f_peq, (210, 200, 190), centro=True)
+        campo = pygame.Rect(W // 2 - 260, 330, 520, 64)
+        pygame.draw.rect(self.tela, (20, 18, 18), campo, border_radius=10)
+        pygame.draw.rect(self.tela, (220, 170, 90), campo, 3, border_radius=10)
+        pisca = "|" if int(time.time() * 2) % 2 == 0 else " "
+        self.texto((txt or "") + pisca if txt or not self.toque else "toque aqui para escrever",
+                   (campo.centerx, campo.y + 14), self.f_med2, (245, 240, 230) if txt else (140, 130, 120), centro=True)
+        # celular: tocar na caixa abre o teclado do celular
+        if self.click and campo.collidepoint(pygame.mouse.get_pos()) and NAVEGADOR:
+            try:
+                import platform
+                r = platform.window.prompt("Coloque seu nome:", txt or "")
+                if r is not None and str(r) not in ("null", "undefined"):
+                    self.nick_txt = txt = str(r).strip()[:16]
+            except Exception:
+                pass
+        pronto = self.botao("Pronto!", W // 2, 420, w=260, ativo=bool(txt.strip()))
+        if (pronto or pygame.K_RETURN in self.teclas) and txt.strip():
+            self.recorde["nick"] = txt.strip()
+            self.gravar_recorde()
+            self.nick_txt = None
+            self.estado = "menu"
+            return
+        if self.nick() and self.botao("Voltar", W // 2, 490, w=260):
+            self.nick_txt = None
+            self.estado = "menu"
+
     def tela_menu(self, dt):
+        if not self.nick() and "--teste" not in sys.argv:  # primeira vez: coloca o nome
+            self.estado = "nome"
+            return
         self.desenhar_fundo_menu(dt)
         self.titulo_menu(140)
+        self.texto(f"Olá, {self.nick()}!", (W // 2, 248), self.f_med, (140, 230, 150), centro=True)
         self.texto("um apocalipse zumbi em mundo aberto", (W // 2, 205), self.f_med2, (210, 200, 190), centro=True)
         y = 290
         if self.botao("Jogar", W // 2, y):
@@ -650,6 +698,11 @@ class Jogo:
         if self.botao("Como jogar", W // 2, y):
             self.estado = "como"
         y += 64
+        if self.botao("Trocar meu nome", W // 2, y):
+            self.nick_txt = self.nick()
+            self.estado = "nome"
+            return
+        y += 64
         if self.botao("Sair", W // 2, y):
             self.sair()
         rec = self.recorde
@@ -657,9 +710,12 @@ class Jogo:
             try:
                 import platform
                 qtd = platform.window.jogadoresTotal
+                agora = int(platform.window.jogandoAgora or 1)
                 if qtd:
-                    self.texto(f"{int(qtd)} jogadores já jogaram o seu jogo", (W // 2, H - 72), self.f_med2,
-                               (255, 210, 120), centro=True)
+                    self.texto(f"{int(qtd)} pessoas já jogaram   ·   {agora} jogando agora", (W // 2, H - 72),
+                               self.f_med2, (255, 210, 120), centro=True)
+                    pygame.draw.circle(self.tela, (60, 230, 90), (W // 2 + self.f_med2.size(
+                        f"{int(qtd)} pessoas já jogaram   ·   {agora} jogando agora")[0] // 2 + 16, H - 58), 6)
             except Exception:
                 pass
         self.texto(f"Recorde: {rec.get('dias', 0)} dias  ·  {rec.get('zumbis', 0)} zumbis  ·  resgates: {rec.get('resgates', 0)}",
@@ -4219,8 +4275,10 @@ class Jogo:
         if thor:
             cz = self.rot(("cao_colo",), self.spr_cao[0], 90, 90)
             self.tela.blit(cz, (hx, hy + 70))
-        self.texto("VOCÊ E O THOR FORAM RESGATADOS!" if thor else "VOCÊ FOI RESGATADO!", (W // 2, 190),
-                   self.f_titulo if not thor else self.f_grande, (120, 230, 140), centro=True)
+        quem = self.nick().upper() if self.nick() else "VOCÊ"
+        self.texto(f"{quem} E O THOR FORAM RESGATADOS!" if thor else
+                   (f"{quem} FOI RESGATADO!" if self.nick() else "VOCÊ FOI RESGATADO!"), (W // 2, 190),
+                   self.f_titulo if not thor and not self.nick() else self.f_grande, (120, 230, 140), centro=True)
         self.texto(f"Sobreviveu {self.dia} dias e derrubou {self.mortes} zumbis.", (W // 2, 280), self.f_med2, centro=True)
         self.texto("O helicóptero levou você e o Thor para a zona segura. Ele abanou o rabo o caminho todo!"
                    if thor else "O helicóptero levou você para a zona segura. Parabéns, sobrevivente.",
@@ -4736,6 +4794,9 @@ class Jogo:
             tela.blit(spr, (psx - spr.get_width() / 2, psy - spr.get_height() / 2))
         spr_jog = spr
         self.spr_jog_atual = spr
+        nome_ = "Piloto do Claude" if self.__dict__.get("piloto") else self.nick()
+        if nome_ and not self.dirigindo and not self.__dict__.get("embarcou"):
+            self.texto(nome_, (psx, psy - 40), self.f_peq, (255, 255, 255), centro=True)
         for c in self.construidos:
             if c["tipo"] == "barricada" and vis.collidepoint(c["x"], c["y"]):
                 spr = self.rot(("bar",), self.spr_barricada, c["ang"] - 90, 3)

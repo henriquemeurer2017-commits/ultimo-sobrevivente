@@ -64,6 +64,17 @@ window.jogadoresTotal = 0;
     fetch(url).then(r => r.json()).then(d => {
         if (d && d.value) { window.jogadoresTotal = d.value; if (!ja) localStorage.setItem("ultimo_contado", "1"); }
     }).catch(() => {});
+    // quem esta jogando AGORA: cada jogo aberto avisa "estou aqui" uma vez por minuto (so soma um numero)
+    window.jogandoAgora = 1;
+    function online() {
+        const m = Math.floor(Date.now() / 60000);
+        const k = base + "%s/ultimo-sobrevivente-jogo/on";
+        fetch(k.replace("%s", "hit") + m).catch(() => {});
+        Promise.all([m - 1, m].map(x => fetch(k.replace("%s", "get") + x).then(r => r.json()).catch(() => ({}))))
+            .then(l => { window.jogandoAgora = Math.max(1, ...l.map(d => (d && d.value) || 0)); });
+    }
+    online();
+    setInterval(online, 60000);
 })();
 </script>
 </body>"""

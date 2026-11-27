@@ -39,12 +39,12 @@ async def custom_site():
     # unpack filesystem from compressed archive into work dir
     if platform.window.location.host.find('.itch.zone')>0:
         import zipfile
-        async with platform.fopen("versao_web.apk?v=1795801219", "rb") as archive:
+        async with platform.fopen("versao_web.apk?v=1795811550", "rb") as archive:
             with zipfile.ZipFile(archive) as zip_ref:
                 zip_ref.extractall(appdir.as_posix())
     else:
         import tarfile
-        async with platform.fopen("versao_web.tar.gz?v=1795801219", "rb") as archive:
+        async with platform.fopen("versao_web.tar.gz?v=1795811550", "rb") as archive:
             tar = tarfile.open(fileobj=archive, mode="r:gz")
             tar.extractall(path=appdir.as_posix(), filter='tar')
             tar.close()
@@ -463,6 +463,17 @@ window.jogadoresTotal = 0;
     fetch(url).then(r => r.json()).then(d => {
         if (d && d.value) { window.jogadoresTotal = d.value; if (!ja) localStorage.setItem("ultimo_contado", "1"); }
     }).catch(() => {});
+    // quem esta jogando AGORA: cada jogo aberto avisa "estou aqui" uma vez por minuto (so soma um numero)
+    window.jogandoAgora = 1;
+    function online() {
+        const m = Math.floor(Date.now() / 60000);
+        const k = base + "%s/ultimo-sobrevivente-jogo/on";
+        fetch(k.replace("%s", "hit") + m).catch(() => {});
+        Promise.all([m - 1, m].map(x => fetch(k.replace("%s", "get") + x).then(r => r.json()).catch(() => ({}))))
+            .then(l => { window.jogandoAgora = Math.max(1, ...l.map(d => (d && d.value) || 0)); });
+    }
+    online();
+    setInterval(online, 60000);
 })();
 </script>
 
