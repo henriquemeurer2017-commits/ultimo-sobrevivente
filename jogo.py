@@ -345,7 +345,10 @@ class Jogo:
                 elif e.button == 3:
                     self.click_dir = True
             elif e.type == pygame.MOUSEWHEEL:
-                self.roda = e.y
+                # uma arma por vez: no navegador um "clique" da rodinha pode vir como 3 ou mais
+                if e.y and time.time() - self.__dict__.get("t_roda", 0) > 0.12:
+                    self.roda = 1 if e.y > 0 else -1
+                    self.t_roda = time.time()
             elif e.type in (pygame.FINGERDOWN, pygame.FINGERMOTION, pygame.FINGERUP) and not NAVEGADOR:
                 self.toque_evento(e)
         if NAVEGADOR:  # no site os dedos vem direto da pagina (o navegador so transforma toque em clique)
@@ -1124,6 +1127,7 @@ class Jogo:
         self.calca = d.get("calca", 0.0)
         self.dificuldade = d.get("dificuldade", "medio")
         self.capitulo = d.get("capitulo", 1)
+        self.armas.sort(key=ordem_arma)
         if self.capitulo == 2:
             self.fechar_portas_metro()
         self.miras = d.get("miras", [])
@@ -1260,7 +1264,7 @@ class Jogo:
                     self.msg(f"Você já tem {a['nome']}: ela ficou aí guardada.", (230, 220, 160))
                 return -1  # -1 = arma vazia que ficou no lugar
             self.armas.append(item)
-            self.armas.sort(key=lambda i: ARMA_IDX[i])
+            self.armas.sort(key=ordem_arma)
             if not a["melee"]:
                 self.pente[item] = self.rnd.randint(1, a["pente"])
             if avisar:
@@ -1788,7 +1792,7 @@ class Jogo:
                     self.miras.append(a["id"])
                 if a.get("silencia") and a["id"] not in self.silen:
                     self.silen.append(a["id"])
-        self.armas.sort(key=lambda i: ARMA_IDX[i])
+        self.armas.sort(key=ordem_arma)
         self.cache_arma = {}
         for k, q in (("9mm", 999), ("12", 999), ("556", 999), ("308", 999), ("flecha", 999), ("foguete", 999),
                      ("comida", 99), ("agua", 99), ("kit", 50), ("bandagem", 50), ("seringa", 20), ("saco", 1),

@@ -144,6 +144,13 @@ ARMAS = [
 ARMAS.append(dict(id="maos", nome="Sem arma", melee=True, dano=10, cd=0.4, alcance=42, ruido=0, escondida=True))
 ARMA_IDX = {a["id"]: i for i, a in enumerate(ARMAS)}
 ARMAS_IDS = set(ARMA_IDX) - {"maos"}
+# ordem das armas na barra e na rodinha do mouse: primeiro as de mao, depois as de tiro, da mais fraca para a mais forte
+ORDEM_ARMAS = ["maos", "faca", "taco", "facao", "machado", "katana", "pistola", "revolver", "smg", "espingarda",
+               "fuzil", "rifle", "besta", "minigun", "rpg", "dragao", "dourado"]
+
+
+def ordem_arma(i):
+    return ORDEM_ARMAS.index(i) if i in ORDEM_ARMAS else 50 + ARMA_IDX.get(i, 0)
 # pacotes da loja: (nome, itens, preco em moedas)
 LOJA_PACOTES = [("Munição de AK-47 x120", {"556": 120}, 25), ("Cartuchos x40", {"12": 40}, 20),
                 ("Munição de sniper x30", {"308": 30}, 25), ("Foguetes de RPG x5", {"foguete": 5}, 40),
