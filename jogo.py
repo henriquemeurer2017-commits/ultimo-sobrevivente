@@ -2524,7 +2524,7 @@ class Jogo:
     # ---------------------------------------------------------------- interacao
     def alvo_interacao(self):
         r = self._alvo_interacao()
-        if r is None and self.cao and self.cao["amigo"] and not self.cao.get("morto") and not self.dirigindo                 and not self.telhado_b and math.hypot(self.cao["x"] - self.p.x, self.cao["y"] - self.p.y) < 60:
+        if r is None and self.cao and self.cao["amigo"] and not self.cao.get("morto") and not self.dirigindo and not self.__dict__.get("piloto") and not self.telhado_b and math.hypot(self.cao["x"] - self.p.x, self.cao["y"] - self.p.y) < 60:
             return ("cuidar_cao", self.cao)  # nada mais perto: o botao do Thor
         return r
 
@@ -2543,7 +2543,7 @@ class Jogo:
             for sx_, sy_ in mt["saidas"]:
                 if math.hypot(sx_ - p.x, sy_ - p.y) < 50:
                     return ("subir_metro", mt)
-        elif not self.__dict__.get("piloto"):
+        elif not self.__dict__.get("piloto") or getattr(self.__dict__.get("piloto"), "quer_metro", False):
             for mt in getattr(m, "metros", ()):
                 ex_, ey_ = mt["ent"]
                 if abs(ex_ - p.x) < 300 and math.hypot(ex_ - p.x, ey_ + 30 - p.y) < 56:
@@ -2558,7 +2558,7 @@ class Jogo:
         if self.cao and not self.cao.get("morto") and math.hypot(self.cao["x"] - p.x, self.cao["y"] - p.y) < 60:
             if not self.cao["amigo"]:
                 return ("cao", self.cao)
-            if self.cuidado_cao() or self.cao.get("sentado"):
+            if (self.cuidado_cao() or self.cao.get("sentado")) and not self.__dict__.get("piloto"):
                 return ("cuidar_cao", self.cao)  # ele precisa de voce: o botao dele vem primeiro
         cx_, cy_ = int(p.x // CHPX), int(p.y // CHPX)
         perto_b = [b for yy in (cy_ - 1, cy_, cy_ + 1) for xx in (cx_ - 1, cx_, cx_ + 1) for b in m.pred_ch.get((xx, yy), ())]

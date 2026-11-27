@@ -29,6 +29,8 @@ class Piloto:
         self.grade = None
         self.t_grade = 0.0
         self.mouse = (W / 2 + 100, H / 2)
+        self.quer_metro = False
+        self.metro_feito = False
         self.montar_tarefas()
 
     # ------------------------------------------------------------------ mapa para andar
@@ -163,6 +165,10 @@ class Piloto:
         for mv in m.moveis[j.n_moveis_base:]:  # a mochila que caiu quando morreu
             if mv["tipo"] == "mochila" and not mv["aberto"]:
                 tf.append(("revistar", mv, "Buscando a mochila que caiu quando morri"))
+        if not self.metro_feito and getattr(m, "metros", None):
+            p = j.p
+            mt = min(m.metros, key=lambda mt: (mt["ent"][0] - p.x) ** 2 + (mt["ent"][1] - p.y) ** 2)
+            tf.append(("metro", mt, f"Indo para o METRÔ da estação {mt['cidade']}"))
         tem_radio = j.__dict__.get("radio_consertado")
         for i, b in enumerate(m.bunkers):
             if j.inv.get("peca", 0) >= PECAS_RADIO or tem_radio:  # ja tem as pecas: direto para a torre
@@ -255,6 +261,11 @@ class Piloto:
             j.usar("kit")
         elif p.vida < 55 and inv.get("bandagem", 0) > 0:
             j.usar("bandagem")
+        cao = j.cao
+        if cao and cao["amigo"] and not cao.get("morto") and math.hypot(cao["x"] - p.x, cao["y"] - p.y) < 90:
+            precisa = j.cuidado_cao()
+            if precisa:
+                j.cuidar_thor(*precisa)
         if p.fome < 40 and inv.get("comida", 0) > 0:
             j.usar("comida")
         if p.sede < 40 and inv.get("agua", 0) > 0:
@@ -393,6 +404,42 @@ class Piloto:
                 else:  # outro movel mais perto: revista ele tambem
                     j.interagir()
                 self.espera = 0.3
+                return (0.0, 0.0), False
+            return self.ir_para(alvo, dt), True
+        if tipo == "metro":
+            if j.metro is None:  # ainda na rua: vai ate a entrada e desce
+                self.quer_metro = True
+                alvo = (obj["ent"][0], obj["ent"][1] + 64)
+                self.status = txt
+                if math.hypot(alvo[0] - p.x, alvo[1] - p.y) < 24:
+                    al = j.alvo_interacao()
+                    if al and al[0] == "descer_metro":
+                        j.interagir()
+                        self.caminho = []
+                        self.espera = 1.0
+                    return (0.0, 0.0), False
+                return self.ir_para(alvo, dt), True
+            # chegou la embaixo: revista a estacao, atravessa ate a outra escada e sobe
+            self.tarefas.pop(0)
+            novas = [("revistar", mv, f"Revistando a estação de metrô {obj['cidade']}")
+                     for mv in sorted((mv for mv in j.mundo.moveis if mv.get("metro") == obj["idx"] and not mv["aberto"]),
+                                      key=lambda mv: mv["x"])]
+            novas.append(("sair_metro", obj, "Atravessando a estação até a outra escada"))
+            self.tarefas[0:0] = novas
+            self.caminho = []
+            return (0.0, 0.0), False
+        if tipo == "sair_metro":
+            if j.metro is None:
+                self.tarefas.pop(0)
+                self.quer_metro = False
+                self.metro_feito = True
+                self.caminho = []
+                return (0.0, 0.0), False
+            alvo = obj["saidas"][-1]
+            if math.hypot(alvo[0] - p.x, alvo[1] - p.y) < 30:
+                j.interagir()
+                self.caminho = []
+                self.espera = 1.0
                 return (0.0, 0.0), False
             return self.ir_para(alvo, dt), True
         if tipo == "cama":
