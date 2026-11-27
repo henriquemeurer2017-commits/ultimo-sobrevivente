@@ -108,7 +108,7 @@ document.addEventListener("keydown", telaCheia, {once: true});
 .tc-zumbi { width: 150px; height: 150px; image-rendering: pixelated; filter: drop-shadow(0 0 22px #a00);
   animation: balanca 1.6s ease-in-out infinite; }
 @keyframes balanca { 0%,100% { transform: rotate(-6deg) translateY(0) } 50% { transform: rotate(6deg) translateY(-8px) } }
-.tc-titulo { font-size: 64px; font-weight: 900; color: #e3271b; letter-spacing: 3px; margin-top: 14px;
+.tc-titulo { font-size: min(64px, 10vw); text-align: center; font-weight: 900; color: #e3271b; letter-spacing: 3px; margin-top: 14px;
   text-shadow: 4px 5px 0 #300, 0 0 26px #ff1a1a88; animation: treme 3s infinite; }
 @keyframes treme { 0%,92%,100% { transform: translate(0,0) } 94% { transform: translate(-3px,2px) } 96% { transform: translate(3px,-2px) } }
 .tc-sub { font-size: 18px; color: #b9a99a; margin-bottom: 26px; }
@@ -159,7 +159,7 @@ document.addEventListener("keydown", telaCheia, {once: true});
 #telasair { position: fixed; inset: 0; z-index: 99999999; background: radial-gradient(circle at 50% 40%, #2a0d0d, #000 80%);
   display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: Arial, sans-serif; color: #e8d8c8; }
 #telasair img { width: 120px; height: 120px; image-rendering: pixelated; filter: drop-shadow(0 0 18px #a00); }
-.ts-titulo { font-size: 44px; font-weight: 900; color: #e3271b; margin: 14px 0 6px; text-shadow: 3px 4px 0 #300; text-align: center; }
+.ts-titulo { font-size: min(44px, 9vw); font-weight: 900; color: #e3271b; margin: 14px 0 6px; text-shadow: 3px 4px 0 #300; text-align: center; }
 .ts-txt { font-size: 18px; margin-bottom: 22px; }
 #telasair button { font-size: 20px; font-weight: bold; padding: 12px 36px; margin: 6px; border-radius: 10px; cursor: pointer;
   background: #5a1a14; color: #f0e0d0; border: 2px solid #c0503c; min-width: 280px; }
@@ -194,6 +194,26 @@ document.getElementById("ts-voltar").onclick = function () { location.reload(); 
 @media (orientation: portrait) and (pointer: coarse) { #girar { display: flex; } }
 </style>
 </body>"""
+    # toques na tela (celular): a pagina guarda onde cada dedo esta, e o jogo le isso a cada quadro
+    toques = """
+<script>
+(function () {
+  window.toquesJSON = "[]";
+  function atualiza(ev) {
+    const c = document.querySelector("canvas");
+    if (!c) return;
+    const r = c.getBoundingClientRect();
+    const l = [];
+    for (const t of ev.touches) l.push([t.identifier, (t.clientX - r.left) / r.width, (t.clientY - r.top) / r.height]);
+    window.toquesJSON = JSON.stringify(l);
+  }
+  ["touchstart", "touchmove", "touchend", "touchcancel"].forEach(n =>
+    document.addEventListener(n, atualiza, { capture: true, passive: true }));
+})();
+</script>
+</body>"""
+    if "toquesJSON" not in html:
+        html = html.replace("</body>", toques, 1)
     if 'id="girar"' not in html:
         html = html.replace("</body>", girar, 1)
     with open(pagina, "w", encoding="utf-8") as f:

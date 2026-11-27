@@ -346,8 +346,37 @@ class Jogo:
                     self.click_dir = True
             elif e.type == pygame.MOUSEWHEEL:
                 self.roda = e.y
-            elif e.type in (pygame.FINGERDOWN, pygame.FINGERMOTION, pygame.FINGERUP):
+            elif e.type in (pygame.FINGERDOWN, pygame.FINGERMOTION, pygame.FINGERUP) and not NAVEGADOR:
                 self.toque_evento(e)
+        if NAVEGADOR:  # no site os dedos vem direto da pagina (o navegador so transforma toque em clique)
+            self.ler_toques_da_pagina()
+
+    def ler_toques_da_pagina(self):
+        try:
+            import platform
+            s = str(platform.window.toquesJSON)
+        except Exception:
+            return
+        ant = self.__dict__.setdefault("toques_js", {})
+        if s == "[]" and not ant:
+            return
+        try:
+            atual = {int(i): (float(x), float(y)) for i, x, y in json.loads(s)}
+        except Exception:
+            return
+
+        class Ev:
+            def __init__(self, tipo, i, x, y):
+                self.type, self.finger_id, self.touch_id, self.x, self.y = tipo, i, 9, x, y
+        for i, (x, y) in atual.items():
+            if i not in ant:
+                self.toque_evento(Ev(pygame.FINGERDOWN, i, x, y))
+            elif ant[i] != (x, y):
+                self.toque_evento(Ev(pygame.FINGERMOTION, i, x, y))
+        for i, (x, y) in ant.items():
+            if i not in atual:
+                self.toque_evento(Ev(pygame.FINGERUP, i, x, y))
+        self.toques_js = atual
 
     def toque_evento(self, e):
         """Celular: dedo do lado esquerdo = joystick; do lado direito = mira e atira; botoes redondos = teclas."""
