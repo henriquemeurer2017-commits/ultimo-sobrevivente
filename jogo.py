@@ -122,6 +122,7 @@ class Zumbi:
 
 
 class Jogo:
+    capitulo = 1       # 1 = o mundo normal; 2 = a DIMENSAO SOMBRIA (depois de zerar o 1)
     no_elevado = None  # linha do trem elevado onde voce esta (la em cima)
     no_trem = None     # dentro do trem elevado: distancia ate a frente do trem
     def __init__(self):
@@ -862,6 +863,14 @@ class Jogo:
         seed = seed if seed is not None else random.randrange(1, 10 ** 9)
         yield from self.preparar_passos(seed)
         m = self.mundo
+        self.capitulo = 1
+        self.radio_consertado = False
+        self.embarcou = False
+        self.thor_junto = False
+        self.no_elevado = None
+        self.no_trem = None
+        self.resgate = None
+        self.heli = None
         self.p = Jogador(*m.inicio)
         self.respawn = list(m.inicio)
         self.inv = {"comida": 1, "agua": 1, "bandagem": 1}
@@ -907,7 +916,7 @@ class Jogo:
             feridas=[self.p.sangrando, self.p.perna, self.p.braco],
             niveis=self.niveis, miras=self.miras, reforco_mochila=self.reforco_mochila,
             colete=self.colete, capacete=self.capacete, radio_consertado=self.__dict__.get("radio_consertado", False), calca=self.calca, nivel_lanterna=self.nivel_lanterna,
-            dificuldade=self.dificuldade,
+            dificuldade=self.dificuldade, capitulo=self.capitulo,
             cao=dict(x=self.cao["x"], y=self.cao["y"], amigo=self.cao["amigo"], vida=self.cao.get("vida", 100),
                      fome=self.cao.get("fome", 100), sede=self.cao.get("sede", 100),
                      morto=self.cao.get("morto", False), sentado=self.cao.get("sentado", False)) if self.cao else None,
@@ -984,6 +993,7 @@ class Jogo:
         self.capacete = d.get("capacete", 0.0)
         self.calca = d.get("calca", 0.0)
         self.dificuldade = d.get("dificuldade", "medio")
+        self.capitulo = d.get("capitulo", 1)
         self.miras = d.get("miras", [])
         self.reforco_mochila = d.get("reforco_mochila", 0)
         self.dono = d.get("dono", False)  # o modo dono vale so neste mundo
@@ -1532,6 +1542,9 @@ class Jogo:
         if s is None:
             return s
         _, mult, soma, _, _ = ESTACOES[self.estacao()]
+        if self.capitulo == 2:  # DIMENSAO SOMBRIA: tudo roxo e avermelhado
+            mult = (mult[0] * 0.92, mult[1] * 0.72, mult[2] * 1.08)
+            soma = (soma[0] + 22, soma[1] - 4, soma[2] + 30)
         if mult == (1, 1, 1) and not any(soma):
             return s
         arr = pygame.surfarray.pixels3d(s)
@@ -2561,6 +2574,8 @@ class Jogo:
 
     # ---------------------------------------------------------------- interacao
     def alvo_interacao(self):
+        if self.__dict__.get("embarcou"):
+            return None
         r = self._alvo_interacao()
         if r is None and self.cao and self.cao["amigo"] and not self.cao.get("morto") and not self.dirigindo and not self.__dict__.get("piloto") and not self.telhado_b and math.hypot(self.cao["x"] - self.p.x, self.cao["y"] - self.p.y) < 60:
             return ("cuidar_cao", self.cao)  # nada mais perto: o botao do Thor
@@ -3017,6 +3032,11 @@ class Jogo:
 
     def equipar_zumbi(self, z):
         """Alguns zumbis nascem com taco/machado na mao, capacete ou colete."""
+        if self.capitulo == 2 and not getattr(z, "forte", False):  # dimensao sombria: zumbi mais forte e rapido
+            z.forte = True
+            z.hp *= 1.35
+            z.vel *= 1.1
+            z.dano *= 1.2
         if z.tipo in ("gigante", "cuspidor", "gritador", "bombeiro"):
             return z
         r = random.random()
@@ -3399,6 +3419,7 @@ class Jogo:
                 self.heli_tiro = 0.0
                 self.heli_alt = 1.25
                 self.embarcou = False
+                self.thor_junto = False
                 self.msg("O HELICÓPTERO CHEGOU! O soldado vai te dar cobertura. Fique embaixo da corda!",
                          (255, 240, 150))
                 self.som("helicoptero", 1.0)
@@ -3937,11 +3958,12 @@ class Jogo:
                 tipo = "normal"
             if tipo != "gigante":  # zumbis especiais
                 r2 = random.random()
-                if r2 < 0.045:
+                k2 = 2.0 if self.capitulo == 2 else 1.0  # na dimensao sombria tem o dobro de especiais
+                if r2 < 0.045 * k2:
                     tipo = "cuspidor"
-                elif r2 < 0.075:
+                elif r2 < 0.075 * k2:
                     tipo = "gritador"
-                elif r2 < 0.11:
+                elif r2 < 0.11 * k2:
                     tipo = "bombeiro"
             z = self.equipar_zumbi(Zumbi(x, y, tipo, random.randrange(len(self.spr_z[tipo])), random))
             if self.resgate is not None:
@@ -4025,7 +4047,7 @@ class Jogo:
     def vencer(self):
         self.estado = "vitoria"
         if not self.dono:  # mundo com codigo nao ganha moedas
-            self.moedas += MOEDAS_ZERAR
+            self.moedas += MOEDAS_ZERAR_CAP2 if self.capitulo == 2 else MOEDAS_ZERAR
             self.recorde["moedas"] = self.moedas
         self.recorde["resgates"] = self.recorde.get("resgates", 0) + 1
         self.recorde["dias"] = max(self.recorde.get("dias", 0), self.dia)
@@ -4051,16 +4073,71 @@ class Jogo:
             pygame.draw.line(self.tela, (24, 24, 26), (hx + 9, hy), (hx + 9 + math.cos(a) * 112, hy + math.sin(a) * 112), 5)
         pygame.draw.line(self.tela, (150, 120, 70), (hx - 6, hy + 10), (hx - 6, hy + 70), 2)
         pygame.draw.circle(self.tela, (196, 150, 110), (int(hx - 6), int(hy + 74)), 7)
-        self.texto("VOCÊ FOI RESGATADO!", (W // 2, 190), self.f_titulo, (120, 230, 140), centro=True)
+        thor = self.__dict__.get("thor_junto")
+        if thor:
+            cz = self.rot(("cao_colo",), self.spr_cao[0], 90, 90)
+            self.tela.blit(cz, (hx, hy + 70))
+        self.texto("VOCÊ E O THOR FORAM RESGATADOS!" if thor else "VOCÊ FOI RESGATADO!", (W // 2, 190),
+                   self.f_titulo if not thor else self.f_grande, (120, 230, 140), centro=True)
         self.texto(f"Sobreviveu {self.dia} dias e derrubou {self.mortes} zumbis.", (W // 2, 280), self.f_med2, centro=True)
-        self.texto("O helicóptero levou você para a zona segura. Parabéns, sobrevivente.", (W // 2, 320), self.f_med2,
-                   centro=True)
+        self.texto("O helicóptero levou você e o Thor para a zona segura. Ele abanou o rabo o caminho todo!"
+                   if thor else "O helicóptero levou você para a zona segura. Parabéns, sobrevivente.",
+                   (W // 2, 320), self.f_med2, centro=True)
         self.texto("Mundo com código de dono: não ganha moedas." if self.dono else
-                   f"+{MOEDAS_ZERAR} MOEDAS por zerar o jogo!  (agora você tem {self.moedas})", (W // 2, 366),
+                   f"+{MOEDAS_ZERAR_CAP2 if self.capitulo == 2 else MOEDAS_ZERAR} MOEDAS por zerar o "
+                   f"{'CAPÍTULO 2' if self.capitulo == 2 else 'capítulo 1'}!  (agora você tem {self.moedas})", (W // 2, 366),
                    self.f_med, (255, 220, 110), centro=True)
-        if self.botao("Menu", W // 2, 420):
-            self.mundo = None
-            self.estado = "menu"
+        if self.capitulo == 1:
+            self.texto("Uma luz roxa abriu no céu... é um PORTAL para outra dimensão!", (W // 2, 402), self.f_med,
+                       (210, 160, 255), centro=True)
+            if self.botao("CAPÍTULO 2: a Dimensão Sombria", W // 2, 450, w=460):
+                self.ir_capitulo2()
+                return
+            if self.botao("Menu", W // 2, 516):
+                self.mundo = None
+                self.estado = "menu"
+        else:
+            self.texto("VOCÊ ZEROU OS DOIS CAPÍTULOS! Você é uma lenda.", (W // 2, 410), self.f_med, (255, 220, 110),
+                       centro=True)
+            if self.botao("Menu", W // 2, 470):
+                self.mundo = None
+                self.estado = "menu"
+
+    def ir_capitulo2(self):
+        """Depois de zerar: voce e o Thor atravessam o portal. Mundo novo, mesmas coisas na mochila."""
+        leva = dict(inv=dict(self.inv), armas=list(self.armas), pente=dict(self.pente), silen=list(self.silen),
+                    arma=self.arma, niveis=dict(self.niveis), miras=list(self.miras),
+                    reforco_mochila=self.reforco_mochila, nivel_mochila=self.nivel_mochila, colete=self.colete,
+                    capacete=self.capacete, calca=self.calca, nivel_lanterna=self.nivel_lanterna,
+                    dificuldade=self.dificuldade, dono=self.dono, mochila_infinita=self.mochila_infinita,
+                    moedas=self.moedas, nome=self.__dict__.get("nome_mundo", "Meu mundo"), mortes=self.mortes)
+        cao = self.cao
+        tinha_thor = bool(cao and cao.get("amigo") and not cao.get("morto"))
+        thor = dict(vida=cao.get("vida", 100), fome=cao.get("fome", 100), sede=cao.get("sede", 100)) if tinha_thor else None
+        semente = (self.mundo.seed * 7 + 13) % (10 ** 9) if self.mundo else None
+
+        def passos():
+            yield from self.novo_jogo_passos(seed=semente)
+            for k, v in leva.items():
+                if k == "nome":
+                    self.nome_mundo = v + " · Cap. 2"
+                else:
+                    setattr(self, k, v)
+            self.inv.pop("peca", None)
+            self.capitulo = 2
+            self.cache_chao.clear()
+            self.cache_copa.clear()
+            self.telhados = {}
+            if thor:  # o Thor atravessou o portal com voce
+                self.cao.update(amigo=True, x=self.p.x + 40, y=self.p.y + 30, sentado=False, modo="quieto", **thor)
+            self.msgs = []
+            self.msg("CAPÍTULO 2: A DIMENSÃO SOMBRIA", (210, 160, 255))
+            self.msg("Vocês atravessaram o portal... o céu é roxo e os zumbis são MAIS FORTES.", (230, 200, 255))
+            if thor:
+                self.msg("O Thor veio junto! Ele está do seu lado.", (255, 220, 140))
+            self.msg("Ache as 5 peças do rádio de novo e chame o resgate. Zerando: +18 MOEDAS!", (255, 220, 110))
+            self.salvar()
+        self.comecar_carga(passos())
 
     def tela_pausa(self, dt):
         self.desenhar()
@@ -4417,6 +4494,8 @@ class Jogo:
                 tela.blit(self.spr_bancada, (c["x"] - camx - 32, c["y"] - camy - 20))
         # o cachorro
         cao = self.cao
+        if self.__dict__.get("embarcou") and self.__dict__.get("thor_junto"):
+            cao = None  # o Thor esta no helicoptero com voce
         if cao and vis.collidepoint(cao["x"], cao["y"]) and not (cao["amigo"] and (self.dirigindo or self.telhado_b)
                                                                  and math.hypot(cao["x"] - p.x, cao["y"] - p.y) < 30):
             sx, sy = cao["x"] - camx, cao["y"] - camy
@@ -4845,6 +4924,13 @@ class Jogo:
             if d < 20:
                 self.heli_fase = "parado"
                 self.msg("A CORDA está descendo! Fique embaixo dela.", (255, 240, 150))
+                cao = self.cao
+                if cao and cao["amigo"] and not cao.get("morto"):
+                    cao["sentado"] = False
+                    cao["modo"] = "quieto"
+                    if math.hypot(cao["x"] - p.x, cao["y"] - p.y) > 400:  # ele vem correndo
+                        cao["x"], cao["y"] = p.x + 60, p.y + 40
+                    self.msg("THOR, VEM! Ele vai subir junto com você!", (255, 220, 140))
         elif fase == "parado":
             if d > 2:  # vai acompanhando voce devagar
                 self.heli[0] += dx / d * min(d, 150 * dt)
@@ -4856,6 +4942,10 @@ class Jogo:
                 if self.t_corda > 1.4:
                     self.heli_fase = "indo"
                     self.embarcou = True
+                    cao = self.cao
+                    self.thor_junto = bool(cao and cao["amigo"] and not cao.get("morto"))
+                    if self.thor_junto:
+                        self.msg("O THOR SUBIU JUNTO! Você segurou ele no colo.", (255, 220, 140))
                     self.heli[2] = 0.0
                     self.dirigindo = None
                     self.acao = None
@@ -4935,9 +5025,12 @@ class Jogo:
             for yy in range(int(sy + 10), int(fim), 10):
                 pygame.draw.line(tela, (190, 160, 100), (sx - 6, yy), (sx + 6, yy), 2)
         tela.blit(corpo, (sx - corpo.get_width() / 2, sy - corpo.get_height() / 2))
-        if self.__dict__.get("embarcou") and corda > 0.2:  # voce pendurado na corda
+        if self.__dict__.get("embarcou") and corda > 0.2:  # voce pendurado na corda (com o Thor no colo)
             pygame.draw.circle(tela, (40, 30, 24), (int(sx), int(sy + 70 * corda - 6)), 9)
             pygame.draw.circle(tela, (196, 150, 110), (int(sx), int(sy + 70 * corda - 6)), 6)
+            if self.__dict__.get("thor_junto"):
+                cz = self.rot(("cao_colo",), self.spr_cao[0], 90, 90)
+                tela.blit(cz, (sx + 4, sy + 70 * corda - 4 - cz.get_height() / 2))
         # helice grande (borrao girando + 4 pas) e a helice da cauda
         t = time.time()
         r = int(118 * alt)
@@ -5198,6 +5291,8 @@ class Jogo:
         self.texto(f"Dia {self.dia}  ·  {h:02d}:{mi:02d}  ·  {ESTACOES[self.estacao()][0]}{clima}", (64, 22), self.f_med)
         d_ = DIFICULDADES.get(self.dificuldade, DIFICULDADES["medio"])
         self.texto(d_["nome"], (24, 96), self.f_peq, d_["cor"])
+        if self.capitulo == 2:
+            self.texto("Capítulo 2 · Dimensão Sombria", (24, 166), self.f_peq, (210, 160, 255))
         if self.dirigindo:
             g = self.dirigindo.get("gas", 0)
             self.texto(f"CARRO  ·  gasolina {int(g)}%  ·  {int(abs(self.vel_carro) / 4)} km/h  ·  E sai",

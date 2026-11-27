@@ -131,7 +131,8 @@ LOJA_PACOTES = [("Munição de AK-47 x120", {"556": 120}, 25), ("Cartuchos x40",
                 ("Munição de sniper x30", {"308": 30}, 25), ("Foguetes de RPG x5", {"foguete": 5}, 40),
                 ("Kit médico x3", {"kit": 3}, 30)]
 CODIGO_DONO = "DONO"
-MOEDAS_ZERAR = 6          # moedas ganhas cada vez que zera o jogo (resgate)
+MOEDAS_ZERAR = 6
+MOEDAS_ZERAR_CAP2 = 18    # moedas por zerar o capitulo 2 (a dimensao sombria)          # moedas ganhas cada vez que zera o jogo (resgate)
 # lanternas: (nome, alcance da luz, abertura, pisca falhando?)
 LANTERNAS = [("Lanterna velha", 330, 0.34, True), ("Lanterna boa", 480, 0.42, False),
              ("Lanterna tática", 640, 0.50, False), ("Holofote militar", 840, 0.58, False)]
