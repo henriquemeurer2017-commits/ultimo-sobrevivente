@@ -235,6 +235,87 @@ document.getElementById("ts-voltar").onclick = function () { location.reload(); 
         html = html.replace("</body>", toques, 1)
     if 'id="girar"' not in html:
         html = html.replace("</body>", girar, 1)
+    # APP NO CELULAR (Android e iPhone): o site vira um app instalavel, com icone na tela inicial,
+    # abrindo em tela cheia e deitado, sem a barra do navegador
+    pasta_web = os.path.dirname(pagina)
+    import json as _json
+    from PIL import Image as _Img
+    _ic = _Img.open(os.path.join(AQUI, "icone.png")).convert("RGBA")
+    for _t2 in (180, 192, 512):
+        _fundo = _Img.new("RGBA", (_t2, _t2), (12, 8, 8, 255))   # fundo escuro (o iPhone nao aceita transparente)
+        _i = _ic.resize((int(_t2 * 0.86),) * 2, _Img.LANCZOS)
+        _fundo.alpha_composite(_i, ((_t2 - _i.width) // 2, (_t2 - _i.height) // 2))
+        _fundo.convert("RGB").save(os.path.join(pasta_web, f"app-{_t2}.png"))
+    with open(os.path.join(pasta_web, "manifest.json"), "w", encoding="utf-8") as f:
+        _json.dump({
+            "name": "Último Sobrevivente", "short_name": "Sobrevivente",
+            "description": "Um apocalipse zumbi em mundo aberto",
+            "start_url": "./", "scope": "./", "display": "fullscreen", "orientation": "landscape",
+            "background_color": "#000000", "theme_color": "#000000",
+            "icons": [{"src": "app-192.png", "sizes": "192x192", "type": "image/png"},
+                      {"src": "app-512.png", "sizes": "512x512", "type": "image/png"},
+                      {"src": "app-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}],
+        }, f, ensure_ascii=False, indent=1)
+    # "ajudante" do app: nao guarda nada velho (sempre pega a versao nova do site)
+    with open(os.path.join(pasta_web, "sw.js"), "w", encoding="utf-8") as f:
+        f.write("self.addEventListener('install', e => self.skipWaiting());\n"
+                "self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));\n"
+                "self.addEventListener('fetch', e => {});\n")
+    cabeca = """
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="app-180.png">
+    <meta name="apple-mobile-web-app-title" content="Sobrevivente">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#000000">
+</head>"""
+    if 'rel="manifest"' not in html:
+        html = html.replace("</head>", cabeca, 1)
+    instalar = """
+<div id="instalar"><div class="in-caixa">
+  <img src="app-192.png" alt="">
+  <div class="in-txt"><b>Instale o jogo no celular!</b><br><span id="in-como">Fica com ícone na tela, igual um app.</span></div>
+  <button id="in-sim">Instalar</button><button id="in-nao">✕</button>
+</div></div>
+<style>
+#instalar { display: none; position: fixed; left: 0; right: 0; top: 8px; z-index: 99999999; justify-content: center; }
+#instalar .in-caixa { display: flex; align-items: center; gap: 10px; background: #1a1414; color: #f0e4d8;
+  border: 2px solid #c8963c; border-radius: 12px; padding: 8px 10px; font: 14px sans-serif; max-width: 96vw; }
+#instalar img { width: 40px; height: 40px; border-radius: 8px; }
+#instalar button { border: 0; border-radius: 8px; padding: 8px 12px; font: bold 14px sans-serif; }
+#in-sim { background: #c8963c; color: #1a1010; }
+#in-nao { background: #3a3030; color: #ddd; }
+</style>
+<script>
+(function () {
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+    const app = window.matchMedia("(display-mode: fullscreen)").matches ||
+                window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+    const celular = window.matchMedia("(pointer: coarse)").matches;
+    if (app || !celular || localStorage.getItem("ultimo_nao_instalar")) return;
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+                (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const caixa = document.getElementById("instalar");
+    let pedido = null;
+    function mostrar() { caixa.style.display = "flex"; }
+    function fechar() { caixa.style.display = "none"; }
+    document.getElementById("in-nao").onclick = e => {
+        e.stopPropagation(); fechar(); localStorage.setItem("ultimo_nao_instalar", "1"); };
+    document.getElementById("in-sim").onclick = e => {
+        e.stopPropagation();
+        if (pedido) { pedido.prompt(); pedido.userChoice.finally(() => { pedido = null; fechar(); }); }
+        else if (ios) document.getElementById("in-como").innerHTML =
+            "No <b>Safari</b>: toque em <b>Compartilhar</b> (quadrado com seta ↑) e depois em <b>Adicionar à Tela de Início</b>.";
+        else document.getElementById("in-como").innerHTML =
+            "No <b>Chrome</b>: toque nos <b>3 pontinhos ⋮</b> e depois em <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.";
+    };
+    window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); pedido = e; mostrar(); });
+    setTimeout(mostrar, 4000);   // iPhone (e Android sem o aviso): mostra o botao com o passo a passo
+    window.addEventListener("appinstalled", fechar);
+})();
+</script>
+</body>"""
+    if 'id="instalar"' not in html:
+        html = html.replace("</body>", instalar, 1)
     with open(pagina, "w", encoding="utf-8") as f:
         f.write(html)
     print("pagina ajustada: tela cheia e sem clique para comecar")

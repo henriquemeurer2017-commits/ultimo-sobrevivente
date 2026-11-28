@@ -39,12 +39,12 @@ async def custom_site():
     # unpack filesystem from compressed archive into work dir
     if platform.window.location.host.find('.itch.zone')>0:
         import zipfile
-        async with platform.fopen("versao_web.apk?v=1795815227", "rb") as archive:
+        async with platform.fopen("versao_web.apk?v=1795866118", "rb") as archive:
             with zipfile.ZipFile(archive) as zip_ref:
                 zip_ref.extractall(appdir.as_posix())
     else:
         import tarfile
-        async with platform.fopen("versao_web.tar.gz?v=1795815227", "rb") as archive:
+        async with platform.fopen("versao_web.tar.gz?v=1795866118", "rb") as archive:
             tar = tarfile.open(fileobj=archive, mode="r:gz")
             tar.extractall(path=appdir.as_posix(), filter='tar')
             tar.close()
@@ -288,6 +288,12 @@ function show_infobox() {
 
     <script src="https://pygame-web.github.io/cdn/0.9.3//browserfs.min.js"></script>
 
+
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="app-180.png">
+    <meta name="apple-mobile-web-app-title" content="Sobrevivente">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#000000">
 </head>
 
 <body>
@@ -605,5 +611,48 @@ document.getElementById("ts-voltar").onclick = function () { location.reload(); 
   font: 24px sans-serif; padding: 24px; }
 @media (orientation: portrait) and (pointer: coarse) { #girar { display: flex; } }
 </style>
+
+<div id="instalar"><div class="in-caixa">
+  <img src="app-192.png" alt="">
+  <div class="in-txt"><b>Instale o jogo no celular!</b><br><span id="in-como">Fica com ícone na tela, igual um app.</span></div>
+  <button id="in-sim">Instalar</button><button id="in-nao">✕</button>
+</div></div>
+<style>
+#instalar { display: none; position: fixed; left: 0; right: 0; top: 8px; z-index: 99999999; justify-content: center; }
+#instalar .in-caixa { display: flex; align-items: center; gap: 10px; background: #1a1414; color: #f0e4d8;
+  border: 2px solid #c8963c; border-radius: 12px; padding: 8px 10px; font: 14px sans-serif; max-width: 96vw; }
+#instalar img { width: 40px; height: 40px; border-radius: 8px; }
+#instalar button { border: 0; border-radius: 8px; padding: 8px 12px; font: bold 14px sans-serif; }
+#in-sim { background: #c8963c; color: #1a1010; }
+#in-nao { background: #3a3030; color: #ddd; }
+</style>
+<script>
+(function () {
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+    const app = window.matchMedia("(display-mode: fullscreen)").matches ||
+                window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+    const celular = window.matchMedia("(pointer: coarse)").matches;
+    if (app || !celular || localStorage.getItem("ultimo_nao_instalar")) return;
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+                (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const caixa = document.getElementById("instalar");
+    let pedido = null;
+    function mostrar() { caixa.style.display = "flex"; }
+    function fechar() { caixa.style.display = "none"; }
+    document.getElementById("in-nao").onclick = e => {
+        e.stopPropagation(); fechar(); localStorage.setItem("ultimo_nao_instalar", "1"); };
+    document.getElementById("in-sim").onclick = e => {
+        e.stopPropagation();
+        if (pedido) { pedido.prompt(); pedido.userChoice.finally(() => { pedido = null; fechar(); }); }
+        else if (ios) document.getElementById("in-como").innerHTML =
+            "No <b>Safari</b>: toque em <b>Compartilhar</b> (quadrado com seta ↑) e depois em <b>Adicionar à Tela de Início</b>.";
+        else document.getElementById("in-como").innerHTML =
+            "No <b>Chrome</b>: toque nos <b>3 pontinhos ⋮</b> e depois em <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.";
+    };
+    window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); pedido = e; mostrar(); });
+    setTimeout(mostrar, 4000);   // iPhone (e Android sem o aviso): mostra o botao com o passo a passo
+    window.addEventListener("appinstalled", fechar);
+})();
+</script>
 </body>
 </html>
